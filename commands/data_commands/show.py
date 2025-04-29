@@ -45,7 +45,7 @@ def show_cmd(id, tag, type, limit):
         click.echo(f"\n找到 {len(entries)} 条匹配记录：")
         for idx, entry in enumerate(entries, 1):
             tags = ', '.join(t.name for t in entry.tags) or "无"
-            desc = entry.description if len(entry.description) <= 50 else entry.description[:47] + "..."
+            desc = entry.description if len(entry.description) <= 100 else entry.description[:97] + "..."
             
             click.echo(f"【记录 {idx}】")
             click.echo(f"  ID: {entry.id}")
