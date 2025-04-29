@@ -4,6 +4,7 @@ from pathlib import Path
 from functools import wraps
 from typing import Dict, Callable, Union, List
 from .models import DataEntry
+from .storage import FileStorage
 
 class ProcessorRegistry:
     """处理函数注册中心（支持任意文件类型）"""
@@ -42,7 +43,7 @@ class ProcessorRegistry:
 
 
 class DataProcessor:
-    def __init__(self, storage, db_session):
+    def __init__(self, storage: FileStorage, db_session):
         self.storage = storage
         self.session = db_session
     
@@ -68,7 +69,7 @@ class DataProcessor:
         entry = DataEntry(
             type='processed',
             path=str(output_path),
-            description=f"Processed by {processor_name}"
+            description=f"Processed by {processor_name}, id: {input_ids}, params: {params}"
         )
         self.session.add(entry)
         self.session.commit()

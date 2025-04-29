@@ -5,7 +5,7 @@ from typing import Dict, Optional
 from datetime import datetime
 
 class ExperimentManager:
-    _CONFIG_DIR = Path.home() / ".config" / "exp_manager"
+    _CONFIG_DIR = Path.cwd() / ".expr_config"
     _CURRENT_FILE = _CONFIG_DIR / "current_experiment"
 
     @property
