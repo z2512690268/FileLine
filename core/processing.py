@@ -79,11 +79,19 @@ class DataProcessor:
         data = self.session.get(DataEntry, input_id)
         return Path(data.path)
 
-    def _get_multiple_paths(self, input_ids: List[int]) -> List[Path]:
-        """获取多个输入路径"""
-        return [Path(self.session.get(DataEntry, i).path) for i in input_ids]
-
-    def _execute_processor(self, processor: dict, input_paths: Union[Path, List[Path]], params: dict) -> Path:
+    def _get_multiple_paths(self, input_ids: List[int]) -> List[dict]:
+        """获取多个输入路径及元数据"""
+        entries = []
+        for i in input_ids:
+            entry = self.session.get(DataEntry, i)
+            entries.append({
+                "path": Path(entry.path),
+                "tags": [t.name for t in entry.tags],
+                "id": entry.id
+            })
+        return entries
+    
+    def _execute_processor(self, processor: dict, input_paths: Union[Path, List[dict]], params: dict) -> Path:
         """执行处理函数"""
         self._validate_params(params, processor["params"])
         

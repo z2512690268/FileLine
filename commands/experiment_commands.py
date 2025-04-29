@@ -7,6 +7,7 @@ from core.base import experiment_manager
 @click.group()
 def experiment():
     """实验管理命令"""
+    click.echo(f"当前实验环境 ：{experiment_manager.current_experiment}")
     pass
 
 @experiment.command()
@@ -33,7 +34,7 @@ def use(name):
 @experiment.command()
 def list():
     """列出所有实验"""
-    experiments = experiment_manager.experiments
+    experiments = experiment_manager.get_experiments()
     table = []
     for name, config in experiments.items():
         table.append([
