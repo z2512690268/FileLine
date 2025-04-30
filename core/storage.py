@@ -17,7 +17,7 @@ class FileStorage:
         self.base_path.mkdir(exist_ok=True)
         (self.base_path/"raw").mkdir(exist_ok=True)
         (self.base_path/"processed").mkdir(exist_ok=True)
-        (self.base_path/"plots").mkdir(exist_ok=True)
+        (self.base_path/"exports").mkdir(exist_ok=True)
     
     def store_raw_data(self, file_path):
         """存储原始数据"""
@@ -33,8 +33,7 @@ class FileStorage:
         target_path = self.base_path/"processed"/f"{unique_id}{ext}"
         return target_path
     
-    def create_plot_file(self, ext=".pdf"):
-        """创建图表文件"""
-        unique_id = uuid.uuid4().hex
-        target_path = self.base_path/"plots"/f"{unique_id}{ext}"
+    def create_export_file(self, name="export.csv"):
+        """创建导出文件"""
+        target_path = self.base_path/"exports"/name
         return target_path

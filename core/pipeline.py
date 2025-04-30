@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 import hashlib
 import json
 import os
+import shutil
 from sqlalchemy import func
 from .processing import DataProcessor, ProcessorRegistry
 from .models import DataEntry, Tag, StepCache, FileMTimeCache
@@ -67,11 +68,16 @@ class PipelineRunner:
             
             if cached and not step.force_rerun and step.cache:
                 self.context[step.output_var] = [cached.output_id]
+                entry = self.session.query(DataEntry).get(cached.output_id)
+                if step.export:
+                    export_path = self.storage.create_export_file(step.export)
+                    shutil.copy(entry.path, export_path)
                 if debug:
                     print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
                     print("Cached Output ID: ", cached.output_id)
-                    entry = self.session.query(DataEntry).get(cached.output_id)
                     print("Cached Output Path: ", entry.path)
+                    if step.export:
+                        print("Exported To Path: ", export_path)
                     print("-------------------------------------------")
                 continue
                 
@@ -88,11 +94,18 @@ class PipelineRunner:
                     output_id=entry.id,
                 ))
 
+            if step.export:
+                export_path = self.storage.create_export_file(step.export)
+                shutil.copy(entry.path, export_path)
+            
             if debug:
                 print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
                 print("Generated Output ID: ", entry.id)
                 print("Generated Output Path: ", entry.path) 
+                if step.export:
+                    print("Exported To Path: ", export_path)
                 print("-------------------------------------------")
+
             self.context[step.output_var] = [entry.id]
             self._log_step(step, entry.id)
         
@@ -123,7 +136,7 @@ class PipelineRunner:
                     print(f"已缓存初始文件： {file_path} ，ID: {entry.id}")
             else:
                 # 存储文件
-                stored_path = self._store_by_type("raw", file_path)
+                stored_path = self.storage.store_raw_data(file_path)
                 # 创建数据条目
                 entry = DataEntry(
                     type=config.data_type,
@@ -157,18 +170,7 @@ class PipelineRunner:
         if debug:
             print("-------------------------------------------")
         return [e.id for e in entries]
-
-    def _store_by_type(self, data_type: str, src_path: str) -> Path:
-        """按类型存储文件"""
-        if data_type == "raw":
-            return self.storage.store_raw_data(src_path)
-        elif data_type == "processed":
-            return self.storage.create_processed_file()
-        elif data_type == "plot":
-            return self.storage.create_plot_file()
-        else:
-            raise ValueError(f"未知数据类型: {data_type}")
-        
+ 
     def _resolve_inputs(self, inputs: Union[str, List[str]]) -> List[int]:
         """解析输入源"""
         if isinstance(inputs, str):

@@ -122,11 +122,7 @@ class DataProcessor:
         self._validate_params(params, processor["params"])
         
         # 调用处理函数
-        plot_types = [".pdf", ".png", ".jpg"]
-        if processor["output_ext"] in plot_types:
-            output_path = self.storage.create_plot_file(ext=processor["output_ext"])
-        else:
-            output_path = self.storage.create_processed_file(ext=processor["output_ext"])
+        output_path = self.storage.create_processed_file(ext=processor["output_ext"])
         # 调用处理函数并获取返回值
         result_tags = processor["func"](input_paths, output_path=output_path, **params)
         
