@@ -14,7 +14,7 @@ def pipeline():
 
 @pipeline.command()
 @click.argument("config_file")
-@click.option("--debug/--no-debug", default=False)
+@click.option("--debug/--no-debug", default=True)
 def run(config_file, debug):
     """运行带文件加载的流水线"""
     config = yaml.safe_load(Path(config_file).read_text())
@@ -49,7 +49,7 @@ def run(config_file, debug):
 # 示例YAML配置
 """
 initial_load:
-  path: "******"  # 使用**匹配子目录
+  path: ""  # 匹配子目录
   type: raw
   tags: [origin]
 
