@@ -56,6 +56,10 @@ class DataProcessor:
         
         # 获取输入路径
         if input_type == "single":
+            if not isinstance(input_ids, int):
+                if len(input_ids) != 1:
+                    raise ValueError("单个输入类型只能输入单个数据记录")
+                input_ids = input_ids[0]
             input_path = self._get_single_path(input_ids)
             output_path, result_tags = self._execute_processor(processor, input_path, params)
         elif input_type == "multi":

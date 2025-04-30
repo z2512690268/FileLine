@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .base import Base
@@ -45,3 +45,20 @@ class Operation(Base):
     parameters = Column(String(512))  # 存储JSON参数
     data_entry_id = Column(Integer, ForeignKey('data_entries.id'))
     data_entry = relationship("DataEntry", back_populates="operations")
+
+class FileMTimeCache(Base):
+    """文件修改时间缓存"""
+    __tablename__ = 'file_mtime_cache'
+    id = Column(Integer, primary_key=True)
+    file_path = Column(String(256), unique=False, index=True)
+    data_entry_id = Column(Integer, ForeignKey('data_entries.id'))
+    last_mtime = Column(Float)  # 存储时间戳
+    created_at = Column(DateTime, default=datetime.now)
+
+class StepCache(Base):
+    """步骤缓存记录"""
+    __tablename__ = 'step_cache'
+    id = Column(Integer, primary_key=True)
+    input_hash = Column(String(64), unique=True, index=True)
+    output_id = Column(Integer, ForeignKey('data_entries.id'))
+    created_at = Column(DateTime, default=datetime.now)

@@ -4,6 +4,7 @@ from core.base import experiment_manager
 from commands.data_commands import data
 from commands.process_commands import process
 from commands.experiment_commands import experiment
+from commands.pipeline_commands import pipeline
 from typing import Optional
 
 @click.group()
@@ -28,6 +29,7 @@ def cli(experiment: Optional[str]):
 cli.add_command(data)
 cli.add_command(process)
 cli.add_command(experiment)
+cli.add_command(pipeline)
 
 if __name__ == "__main__":
     cli()
