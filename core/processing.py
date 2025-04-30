@@ -3,11 +3,22 @@ import inspect
 from pathlib import Path
 from functools import wraps
 from typing import Dict, Callable, Union, List
+import hashlib
 from .models import DataEntry, Tag
 from .storage import FileStorage
 class ProcessorRegistry:
     """处理函数注册中心（支持任意文件类型）"""
     _processors: Dict[str, Dict] = {}
+
+    @classmethod
+    def _calculate_hash(cls, func: Callable) -> str:
+        """计算函数代码的哈希值"""
+        # 获取函数源代码（包括装饰器）
+        source = inspect.getsource(func)
+        # 去除空行和前后空格
+        cleaned = '\n'.join([line.strip() for line in source.splitlines() if line.strip()])
+        # 生成SHA256哈希
+        return hashlib.sha256(cleaned.encode('utf-8')).hexdigest()[:8]  # 取前8位作为版本号
 
     @classmethod
     def register(cls, name: str, input_type: str = "single", output_ext: str = ".txt"):
@@ -19,7 +30,8 @@ class ProcessorRegistry:
         """
         def decorator(func: Callable):
             sig = inspect.signature(func)
-            
+            func_hash = cls._calculate_hash(func)
+
             @wraps(func)
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
@@ -28,7 +40,8 @@ class ProcessorRegistry:
                 "func": wrapper,
                 "input_type": input_type,
                 "output_ext": output_ext,
-                "params": list(sig.parameters.keys())[1:]  # 排除第一个路径参数
+                "params": list(sig.parameters.keys())[1:],  # 排除第一个路径参数
+                "hash": func_hash
             }
             return wrapper
         return decorator

@@ -22,6 +22,7 @@ class PipelineStep:
     output_var: str         # 输出变量名
     cache: str            # 是否使用缓存
     force_rerun: bool        # 是否强制重新运行
+    export: Optional[str]   # 输出文件导出名(不包括扩展名)
 
 
 @dataclass
@@ -52,8 +53,10 @@ class PipelineRunner:
             resolved_ids = self._resolve_inputs(step.inputs)
 
             # 检查缓存
+            process_desc = ProcessorRegistry.get_processor(step.processor)
             step_hash = self._generate_step_hash(
                 processor=step.processor,
+                func_hash=process_desc["hash"],
                 input_ids=resolved_ids,
                 params=step.params
             )
@@ -185,11 +188,12 @@ class PipelineRunner:
         entry.description = history + entry.description
         self.session.commit()
 
-    def _generate_step_hash(self, processor: str, input_ids: List[int], params: dict) -> str:
+    def _generate_step_hash(self, processor: str, func_hash: str, input_ids: List[int], params: dict) -> str:
         """生成步骤唯一哈希"""
         sorted_params = json.dumps(params, sort_keys=True)
         components = [
             processor,
+            func_hash,
             ','.join(sorted(map(str, input_ids))),
             sorted_params
         ]

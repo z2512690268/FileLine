@@ -5,6 +5,7 @@ from core.processing import ProcessorRegistry
 
 @ProcessorRegistry.register(name="plot_loss_curve", input_type="single", output_ext=".pdf")
 def plot_loss_curve(input_path: dict, output_path: Path, 
+                   figsize: tuple = (10, 6),
                    time_col: str = "time", 
                    loss_col: str = "loss",
                    title: str = "Training Loss Curve",
@@ -13,10 +14,17 @@ def plot_loss_curve(input_path: dict, output_path: Path,
                    line_color: str = "blue",
                    line_style: str = "-",
                    grid: bool = True,
-                   dpi: int = 300):
+                   dpi: int = 300,
+                   xlim: tuple = None,
+                   ylim: tuple = None,
+                   xticks_num: int = None,
+                   yticks_num: int = None,
+                   xticks_rotation: float = 0,
+                   yticks_rotation: float = 0):
     """绘制Loss-Time曲线
     
     Args:
+        figsize: 图表大小 (默认(10, 6))
         time_col: 时间列名 (默认'time')
         loss_col: Loss列名 (默认'loss')
         title: 图表标题 (默认'Training Loss Curve')
@@ -26,6 +34,12 @@ def plot_loss_curve(input_path: dict, output_path: Path,
         line_style: 线条样式 (默认'-')
         grid: 是否显示网格 (默认True)
         dpi: 输出分辨率 (默认300)
+        xlim: X轴范围 (默认自动，格式(min,max))
+        ylim: Y轴范围 (默认自动，格式(min,max))
+        xticks_num: X轴刻度数量 (默认自动)
+        yticks_num: Y轴刻度数量 (默认自动)
+        xticks_rotation: X轴刻度旋转角度 (默认0)
+        yticks_rotation: Y轴刻度旋转角度 (默认0
     """
     # 读取CSV数据
     df = pd.read_csv(input_path["path"])
@@ -34,16 +48,33 @@ def plot_loss_curve(input_path: dict, output_path: Path,
     for col in [time_col, loss_col]:
         if col not in df.columns:
             raise ValueError(f"CSV文件中缺少必要列: {col}")
-    
+     
     # 创建画布
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=figsize)
     
     # 绘制曲线
     plt.plot(df[time_col], df[loss_col], 
             color=line_color, 
             linestyle=line_style,
             label=f"{loss_col} curve")
+
+    # 设置坐标轴范围
+    if xlim is not None:
+        plt.xlim(xlim[0], xlim[1])
+    if ylim is not None:
+        plt.ylim(ylim[0], ylim[1])
     
+    # 设置刻度数量
+    ax = plt.gca()
+    if xticks_num is not None:
+        ax.xaxis.set_major_locator(plt.MaxNLocator(xticks_num))
+    if yticks_num is not None:
+        ax.yaxis.set_major_locator(plt.MaxNLocator(yticks_num))
+    
+    # 旋转刻度标签
+    plt.xticks(rotation=xticks_rotation)
+    plt.yticks(rotation=yticks_rotation)
+
     # 添加图表元素
     plt.title(title, fontsize=14)
     plt.xlabel(xlabel, fontsize=12)

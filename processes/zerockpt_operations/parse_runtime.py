@@ -23,11 +23,11 @@ def parse_runtime(input_path: dict, output_path: Path):
             # 处理第一类日志
             if 'Loss' in line:
                 # 解析loss
-                step_str = line.split('[Rank 0] Step ')[1].split(':')[0]
+                step_str = line.split('[Rank 0] Step ')[1].split(' ')[0]
                 loss_str = line.split('Loss: ')[1]
             else:
                 # 解析时间
-                step_str = line.split('[Rank 0] Step ')[1].split(':')[0]
+                step_str = line.split('[Rank 0] Step ')[1].split(' ')[0]
                 time_str = line.split('Time: ')[1].split('s')[0]
                 forward_str = line.split('Forward: ')[1].split('s')[0]
                 backward_str = line.split('Backward: ')[1].split('s')[0]
