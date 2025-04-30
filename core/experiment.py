@@ -31,6 +31,12 @@ class ExperimentManager:
         self.current_experiment = name
         if persist:
             self._CURRENT_FILE.write_text(name)
+    def delete_current(self):
+        """删除当前实验"""
+        if self.current_experiment is None:
+            return
+        self._CURRENT_FILE.unlink()
+        self.current_experiment = None
 
     def get_experiments(self) -> Dict:
         """获取所有实验配置"""

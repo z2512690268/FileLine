@@ -62,6 +62,6 @@ def delete(name):
         del experiments[name]
         experiment_manager._save_experiments(experiments)
         click.secho(f"成功删除实验: {name}", fg='green')
-        experiment_manager.set_current(list(experiments.keys())[0])
+        experiment_manager.delete_current()
     except Exception as e:
         click.secho(f"删除失败: {str(e)}", fg='red')

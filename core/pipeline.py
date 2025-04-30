@@ -20,6 +20,9 @@ class PipelineStep:
     inputs: Union[str, List[str]]  # 输入源标识符
     params: Dict            # 处理参数
     output_var: str         # 输出变量名
+    cache: str            # 是否使用缓存
+    force_rerun: bool        # 是否强制重新运行
+
 
 @dataclass
 class InitialLoadConfig:
@@ -51,15 +54,15 @@ class PipelineRunner:
             # 检查缓存
             step_hash = self._generate_step_hash(
                 processor=step.processor,
-                input_ids=input_ids,
+                input_ids=resolved_ids,
                 params=step.params
             )
             
             cached = self.session.query(StepCache).filter(
                 StepCache.input_hash == step_hash
-            ).first()
+            ).order_by(StepCache.created_at.desc()).first()
             
-            if cached:
+            if cached and not step.force_rerun and step.cache:
                 self.context[step.output_var] = [cached.output_id]
                 if debug:
                     print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
@@ -76,10 +79,12 @@ class PipelineRunner:
             )
 
             # 记录缓存
-            self.session.add(StepCache(
-                input_hash=step_hash,
-                output_id=entry.id,
-            ))
+            if step.cache:
+                self.session.add(StepCache(
+                    input_hash=step_hash,
+                    output_id=entry.id,
+                ))
+
             if debug:
                 print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
                 print("Generated Output ID: ", entry.id)

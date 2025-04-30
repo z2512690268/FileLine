@@ -32,7 +32,9 @@ def run(config_file, debug):
             processor=step["processor"],
             inputs=step.get("inputs", "initial"),
             params=step.get("params", {}),
-            output_var=step["output"]
+            output_var=step["output"],
+            cache=step.get("cache", True),
+            force_rerun=step.get("force_rerun", False)
         ) for step in config["steps"]
     ]
     
@@ -47,20 +49,21 @@ def run(config_file, debug):
 # 示例YAML配置
 """
 initial_load:
-  path: "./data/raw/**/*.csv"  # 使用**匹配子目录
+  path: "******"  # 使用**匹配子目录
   type: raw
-  tags: [实验数据, 初始]
+  tags: [origin]
 
 steps:
-  - processor: data_clean
+  - processor: parse_runtime
     inputs: initial
-    output: cleaned
+    output: parsed
+    cache: False
+
+  - processor: csv_multiplier
+    inputs: parsed
+    output: multiplied
     params:
-      remove_na: true
+      multiplier: 2.0
 
-  - processor: feature_engineer
-    inputs: cleaned
-    output: features
-
-final_output: features
+final_output: multiplied
 """

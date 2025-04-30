@@ -59,6 +59,6 @@ class StepCache(Base):
     """步骤缓存记录"""
     __tablename__ = 'step_cache'
     id = Column(Integer, primary_key=True)
-    input_hash = Column(String(64), unique=True, index=True)
+    input_hash = Column(String(64), unique=False, index=True)
     output_id = Column(Integer, ForeignKey('data_entries.id'))
     created_at = Column(DateTime, default=datetime.now)
