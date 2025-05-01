@@ -1,12 +1,13 @@
 from pathlib import Path
+from typing import Optional, Union
 import pandas as pd
 import matplotlib.pyplot as plt
 from core.processing import ProcessorRegistry
 
 @ProcessorRegistry.register(name="plot_loss_curve", input_type="single", output_ext=".pdf")
-def plot_loss_curve(input_path: dict, output_path: Path, 
+def plot_loss_curve(input_path: dict, output_path: Path,
                    figsize: tuple = (10, 6),
-                   time_col: str = "time", 
+                   time_col: str = "time",
                    loss_col: str = "loss",
                    title: str = "Training Loss Curve",
                    xlabel: str = "Time (s)",
@@ -20,26 +21,39 @@ def plot_loss_curve(input_path: dict, output_path: Path,
                    xticks_num: int = None,
                    yticks_num: int = None,
                    xticks_rotation: float = 0,
-                   yticks_rotation: float = 0):
-    """绘制Loss-Time曲线
+                   yticks_rotation: float = 0,
+                   # 新增字体参数
+                   title_fontsize: int = 14,
+                   title_fontfamily: Optional[str] = None,
+                   xlabel_fontsize: int = 12,
+                   xlabel_fontfamily: Optional[str] = None,
+                   ylabel_fontsize: int = 12,
+                   ylabel_fontfamily: Optional[str] = None,
+                   xticks_fontsize: Optional[int] = None,
+                   xticks_fontfamily: Optional[str] = None,
+                   yticks_fontsize: Optional[int] = None,
+                   yticks_fontfamily: Optional[str] = None,
+                   # 新增图例参数
+                   legend_loc: Union[str, tuple] = "best",
+                   legend_title: Optional[str] = None,
+                   legend_fontsize: Optional[int] = None,
+                   legend_fontfamily: Optional[str] = None,
+                   legend_shadow: bool = False,
+                   legend_frameon: bool = True,
+                   legend_facecolor: Optional[str] = None,
+                   legend_edgecolor: Optional[str] = None):
+    """绘制Loss-Time曲线（支持字体和图例自定义）
     
-    Args:
-        figsize: 图表大小 (默认(10, 6))
-        time_col: 时间列名 (默认'time')
-        loss_col: Loss列名 (默认'loss')
-        title: 图表标题 (默认'Training Loss Curve')
-        xlabel: X轴标签 (默认'Time (s)')
-        ylabel: Y轴标签 (默认'Loss')
-        line_color: 线条颜色 (默认'blue')
-        line_style: 线条样式 (默认'-')
-        grid: 是否显示网格 (默认True)
-        dpi: 输出分辨率 (默认300)
-        xlim: X轴范围 (默认自动，格式(min,max))
-        ylim: Y轴范围 (默认自动，格式(min,max))
-        xticks_num: X轴刻度数量 (默认自动)
-        yticks_num: Y轴刻度数量 (默认自动)
-        xticks_rotation: X轴刻度旋转角度 (默认0)
-        yticks_rotation: Y轴刻度旋转角度 (默认0
+    新增参数说明:
+        title_fontsize/family: 标题字号和字体
+        xlabel/ylabel_fontsize/family: 坐标轴标签字号字体
+        xticks/yticks_fontsize/family: 刻度标签字号字体
+        legend_loc: 图例位置（'best', 'upper right'等）
+        legend_title: 图例标题
+        legend_fontsize/family: 图例文字字号字体
+        legend_shadow: 是否显示阴影
+        legend_frameon: 是否显示边框
+        legend_face/edgecolor: 图例背景/边框颜色
     """
     # 读取CSV数据
     df = pd.read_csv(input_path["path"])
@@ -48,15 +62,15 @@ def plot_loss_curve(input_path: dict, output_path: Path,
     for col in [time_col, loss_col]:
         if col not in df.columns:
             raise ValueError(f"CSV文件中缺少必要列: {col}")
-     
+    
     # 创建画布
     plt.figure(figsize=figsize)
     
     # 绘制曲线
-    plt.plot(df[time_col], df[loss_col], 
-            color=line_color, 
-            linestyle=line_style,
-            label=f"{loss_col} curve")
+    plt.plot(df[time_col], df[loss_col],
+             color=line_color,
+             linestyle=line_style,
+             label=f"{loss_col} curve")
 
     # 设置坐标轴范围
     if xlim is not None:
@@ -71,15 +85,55 @@ def plot_loss_curve(input_path: dict, output_path: Path,
     if yticks_num is not None:
         ax.yaxis.set_major_locator(plt.MaxNLocator(yticks_num))
     
-    # 旋转刻度标签
-    plt.xticks(rotation=xticks_rotation)
-    plt.yticks(rotation=yticks_rotation)
+    # 设置刻度标签属性
+    ax.tick_params(axis='x', which='major', 
+                   labelsize=xticks_fontsize,
+                   rotation=xticks_rotation)
+    ax.tick_params(axis='y', which='major',
+                   labelsize=yticks_fontsize,
+                   rotation=yticks_rotation)
+    
+    # 设置字体家族（需要单独处理）
+    if xticks_fontfamily:
+        for label in ax.get_xticklabels():
+            label.set_fontfamily(xticks_fontfamily)
+    if yticks_fontfamily:
+        for label in ax.get_yticklabels():
+            label.set_fontfamily(yticks_fontfamily)
 
     # 添加图表元素
-    plt.title(title, fontsize=14)
-    plt.xlabel(xlabel, fontsize=12)
-    plt.ylabel(ylabel, fontsize=12)
-    plt.legend()
+    plt.title(title, 
+             fontsize=title_fontsize, 
+             fontfamily=title_fontfamily)
+    plt.xlabel(xlabel, 
+              fontsize=xlabel_fontsize, 
+              fontfamily=xlabel_fontfamily)
+    plt.ylabel(ylabel, 
+              fontsize=ylabel_fontsize, 
+              fontfamily=ylabel_fontfamily)
+    
+    # 配置图例参数
+    legend_params = {
+        'loc': legend_loc,
+        'title': legend_title,
+        'shadow': legend_shadow,
+        'frameon': legend_frameon,
+        'facecolor': legend_facecolor,
+        'edgecolor': legend_edgecolor
+    }
+    
+    # 处理字体属性
+    font_props = {}
+    if legend_fontsize:
+        font_props['size'] = legend_fontsize
+    if legend_fontfamily:
+        font_props['family'] = legend_fontfamily
+    if font_props:
+        legend_params['prop'] = font_props
+    
+    # 过滤空值并添加图例
+    legend_params = {k: v for k, v in legend_params.items() if v is not None}
+    plt.legend(**legend_params)
     
     if grid:
         plt.grid(True, linestyle='--', alpha=0.6)
@@ -88,5 +142,4 @@ def plot_loss_curve(input_path: dict, output_path: Path,
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     plt.close()
     
-    # 返回自动生成的标签
     return ["auto_plot", "loss_curve", f"dpi_{dpi}"]

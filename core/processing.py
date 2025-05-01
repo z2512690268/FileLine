@@ -2,23 +2,26 @@
 import inspect
 from pathlib import Path
 from functools import wraps
-from typing import Dict, Callable, Union, List
+from typing import Dict, Callable, Union, List, Type, Optional, Set
 import hashlib
 from .models import DataEntry, Tag
 from .storage import FileStorage
+
 class ProcessorRegistry:
     """处理函数注册中心（支持任意文件类型）"""
     _processors: Dict[str, Dict] = {}
 
     @classmethod
-    def _calculate_hash(cls, func: Callable) -> str:
-        """计算函数代码的哈希值"""
-        # 获取函数源代码（包括装饰器）
-        source = inspect.getsource(func)
-        # 去除空行和前后空格
-        cleaned = '\n'.join([line.strip() for line in source.splitlines() if line.strip()])
-        # 生成SHA256哈希
-        return hashlib.sha256(cleaned.encode('utf-8')).hexdigest()[:8]  # 取前8位作为版本号
+    def dependencies(deps):
+        """注解，用于声明函数或类的依赖项"""
+        def decorator(obj):
+            if not hasattr(obj, '__dependencies__'):
+                obj.__dependencies__ = []
+            for dep in deps:
+                if dep not in obj.__dependencies__:
+                    obj.__dependencies__.append(dep)
+            return obj
+        return decorator
 
     @classmethod
     def register(cls, name: str, input_type: str = "single", output_ext: str = ".txt"):
@@ -40,11 +43,46 @@ class ProcessorRegistry:
                 "func": wrapper,
                 "input_type": input_type,
                 "output_ext": output_ext,
-                "params": list(sig.parameters.keys())[1:],  # 排除第一个路径参数
                 "hash": func_hash
             }
             return wrapper
         return decorator
+
+
+    @classmethod
+    def _collect_source_code(cls, obj: Union[Callable, Type], visited: Optional[Set[int]] = None) -> str:
+        if visited is None:
+            visited = set()
+        obj_id = id(obj)
+        if obj_id in visited:
+            return ''
+        visited.add(obj_id)
+        
+        # 获取对象的源代码
+        try:
+            source = inspect.getsource(obj)
+        except OSError:
+            # 无法获取源代码（如C扩展），则返回空字符串
+            source = ''
+        cleaned = '\n'.join([line.strip() for line in source.splitlines() if line.strip()])
+        
+        # 收集依赖项的源代码
+        deps = getattr(obj, '__dependencies__', [])
+        deps_source = []
+        for dep in deps:
+            if inspect.isclass(dep) or inspect.isfunction(dep):
+                dep_source = cls._collect_source_code(dep, visited)
+                deps_source.append(dep_source)
+            # 其他类型忽略
+        # 合并所有源代码
+        total_source = cleaned + ''.join(deps_source)
+        return total_source
+
+    @classmethod
+    def _calculate_hash(cls, func: Callable) -> str:
+        """计算函数及其依赖项代码的哈希值"""
+        total_source = cls._collect_source_code(func)
+        return hashlib.sha256(total_source.encode('utf-8')).hexdigest()[:8]  # 取前8位作为版本号
 
     @classmethod
     def get_processor(cls, name: str) -> Dict:
@@ -70,6 +108,8 @@ class DataProcessor:
         # 获取输入路径
         if input_type == "single":
             if not isinstance(input_ids, int):
+                if len(input_ids) == 0:
+                    raise ValueError("单个输入类型不能为空")
                 if len(input_ids) != 1:
                     raise ValueError("单个输入类型只能输入单个数据记录")
                 input_ids = input_ids[0]
@@ -119,8 +159,6 @@ class DataProcessor:
     
     def _execute_processor(self, processor: dict, input_paths: Union[dict, List[dict]], params: dict) -> Path:
         """执行处理函数"""
-        self._validate_params(params, processor["params"])
-        
         # 调用处理函数
         output_path = self.storage.create_processed_file(ext=processor["output_ext"])
         # 调用处理函数并获取返回值
@@ -135,12 +173,6 @@ class DataProcessor:
             raise ValueError("处理函数返回值必须是字符串或列表")
         
         return output_path, result_tags
-
-    def _validate_params(self, given: dict, expected: list):
-        """参数验证"""
-        extra = set(given.keys()) - set(expected)
-        if extra:
-            raise ValueError(f"非法参数: {extra}，可用参数: {expected}")
 
     def _add_auto_tags(self, entry: DataEntry, tags: list):
         """添加自动生成的标签"""
