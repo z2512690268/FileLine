@@ -70,7 +70,7 @@ class PipelineRunner:
                 self.context[step.output_var] = [cached.output_id]
                 entry = self.session.query(DataEntry).get(cached.output_id)
                 if step.export:
-                    export_path = self.storage.create_export_file(step.export)
+                    export_path = self.storage.create_export_file(step.export, entry.id)
                     shutil.copy(entry.path, export_path)
                 if debug:
                     print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
@@ -95,7 +95,7 @@ class PipelineRunner:
                 ))
 
             if step.export:
-                export_path = self.storage.create_export_file(step.export)
+                export_path = self.storage.create_export_file(step.export, entry.id)
                 shutil.copy(entry.path, export_path)
             
             if debug:

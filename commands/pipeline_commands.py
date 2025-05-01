@@ -106,7 +106,7 @@ def run(config_file, global_config, debug):
             
             # 导出结果
             if export_config:
-                export_path = runner.storage.create_export_file(export_config)
+                export_path = runner.storage.create_export_file(export_config, entry.id)
                 shutil.copyfile(entry.path, export_path)
                 click.echo(f"导出结果到: {export_path}")
 
