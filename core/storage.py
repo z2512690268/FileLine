@@ -36,4 +36,6 @@ class FileStorage:
     def create_export_file(self, name="export.csv"):
         """创建导出文件"""
         target_path = self.base_path/"exports"/name
+        # 创建对应目录
+        target_path.parent.mkdir(parents=True, exist_ok=True)
         return target_path
