@@ -184,9 +184,8 @@ class PipelineRunner:
     def _log_step(self, step: PipelineStep, output_id: int):
         """记录流水线步骤信息"""
         entry = self.session.query(DataEntry).get(output_id)
-        history = f"Pipeline Step: {step.processor}\n"
+        history = f"Pipeline Step: {step.processor}, "
         history += f"Inputs: {step.inputs}\n"
-        history += f"Params: {step.params}\n"
         entry.description = history + entry.description
         self.session.commit()
 

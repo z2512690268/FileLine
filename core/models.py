@@ -3,6 +3,9 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from .base import Base
 
+# SQLite支持任意长度字符串，因此下面的长度限制并未生效 
+
+
 data_tag_association = Table(
     'data_tag', Base.metadata,
     Column('data_id', Integer, ForeignKey('data_entries.id')),
