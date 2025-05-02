@@ -4,7 +4,7 @@ import yaml
 from pathlib import Path
 import shutil
 import re
-from core.pipeline import PipelineRunner, PipelineStep, InitialLoadConfig
+from core.pipeline import PipelineRunner, PipelineStep, InitialLoadConfig, IncludeSpec
 from core.storage import FileStorage
 from core.models import DataEntry, Tag
 from core.base import get_session
@@ -67,9 +67,10 @@ def run(config_file, global_config, debug):
     
     # 解析初始加载配置
     load_config = InitialLoadConfig(
-        path_pattern=config["initial_load"]["path"],
+        include_patterns=[IncludeSpec(path=p["path"], tags=p.get("tags", [])) for p in config["initial_load"]["include"]],
+        exclude_patterns=config["initial_load"].get("exclude", []),
         data_type=config["initial_load"].get("type", "raw"),
-        tags=config["initial_load"].get("tags", [])
+        tags=config["initial_load"].get("global_tags", [])
     )
     
     # 解析处理步骤

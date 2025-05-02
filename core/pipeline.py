@@ -1,6 +1,6 @@
 # core/pipeline.py
 from pathlib import Path
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Set
 from dataclasses import dataclass
 from copy import deepcopy
 import glob
@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import shutil
+import fnmatch
 from sqlalchemy import func
 from .processing import DataProcessor, ProcessorRegistry
 from .models import DataEntry, Tag, StepCache, FileMTimeCache
@@ -25,10 +26,16 @@ class PipelineStep:
     force_rerun: bool        # 是否强制重新运行
     export: Optional[str]   # 输出文件导出名(不包括扩展名)
 
+@dataclass
+class IncludeSpec:
+    """单个包含模式的配置"""
+    path: str              # Glob路径模式
+    tags: Optional[List[str]] = None  # 该模式独有的标签
 
 @dataclass
 class InitialLoadConfig:
-    path_pattern: str         # 支持glob的通配符路径
+    include_patterns: List[IncludeSpec]       # 包含的glob模式列表
+    exclude_patterns: List[str] = None  # 排除的glob模式列表
     data_type: str = "raw"    # 数据类型(raw/processed/plot)
     tags: Optional[List[str]] = None  # 自动添加的标签
 
@@ -117,10 +124,33 @@ class PipelineRunner:
 
     def _load_initial_files(self, config: InitialLoadConfig,
                                 debug: bool = False) -> List[int]:
-        """加载初始文件到系统"""
-        matched_files = glob.glob(config.path_pattern, recursive=True)
+        """加载初始文件到系统（支持包含/排除模式）"""
+        # 收集所有包含文件
+        file_tags: Dict[str, List[str]] = {}
+        all_included: Set[str] = set()
+        for spec in config.include_patterns:
+            pattern = spec.path
+            tags = spec.tags or []
+            matches = glob.glob(pattern, recursive=True)
+            all_included.update(matches)
+            for file in matches:
+                file_tags.setdefault(file, []).extend(tags)
+        
+        # 处理排除模式
+        if config.exclude_patterns:
+            all_excluded = set()
+            for exclude_pattern in config.exclude_patterns:
+                for file in all_included:
+                    if Path(file).match(exclude_pattern):  # 使用 Path.match
+                        all_excluded.add(file)
+            all_included -= all_excluded
+        
+        matched_files = sorted(all_included)
+        
         if not matched_files:
-            raise FileNotFoundError(f"未找到匹配文件: {config.path_pattern}")
+            raise FileNotFoundError(
+                f"未找到匹配文件。包含模式: {config.include_patterns}，排除模式: {config.exclude_patterns}"
+            )
         
         entries = []
         for file_path in matched_files:
@@ -154,6 +184,14 @@ class PipelineRunner:
                 ))
                 if debug:
                     print(f"重新加载初始文件 {file_path} ，ID: {entry.id}")
+
+            if file_tags.get(file_path):
+                for tag_name in file_tags[file_path]:
+                    tag = self.session.query(Tag).filter_by(name=tag_name).first()
+                    if not tag:
+                        tag = Tag(name=tag_name)
+                        self.session.add(tag)
+                    entry.tags.append(tag)
 
             # 添加标签
             if config.tags:
