@@ -62,17 +62,12 @@ class ExperimentManager:
         # 存储配置
         experiments[name] = {
             "database": str(db_path.absolute()),
-            "data_root": str(exp_dir/"data"),
+            "data_root": str(exp_dir.absolute()),
             "description": description,
             "created_at": datetime.now().isoformat()
         }
         
         self._save_experiments(experiments)
-        
-        # 创建数据目录
-        (exp_dir/"data/raw").mkdir(parents=True, exist_ok=True)
-        (exp_dir/"data/processed").mkdir(parents=True, exist_ok=True)
-        (exp_dir/"data/plots").mkdir(parents=True, exist_ok=True)
 
     def _save_experiments(self, data: Dict) -> None:
         """保存实验配置"""
