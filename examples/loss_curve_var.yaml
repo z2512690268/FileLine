@@ -1,0 +1,38 @@
+initial_load:
+  include: 
+    - path: "/aaa/bbb/*.log"  # 所有以.log结尾的文件
+    - tags: [test]
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: text_merge
+    inputs: initial
+    output: merged
+
+  - processor: text_merge
+    inputs: [initial, merged] # 多个输入变量
+    output: merged
+
+  - processor: parse_runtime
+    inputs: merged
+    output: parsed
+
+  - processor: plot_loss_curve
+    inputs: parsed
+    output: loss_curve
+    params:
+      time_col: "step"
+      loss_col: "loss"
+      title: ${TITLE}
+      xlabel: "Steps"
+      ylabel: "Loss"
+      grid: False
+      ylim: [5.3, 10.5]
+      yticks_num: 6
+      xticks_num: 10
+      legend_loc: "upper left"
+
+final_output: 
+  - name: loss_curve
+    export: loss_curve.pdf

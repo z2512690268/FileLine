@@ -1,0 +1,23 @@
+initial_load:
+  include: 
+    - path: "/aaa/bbb/a.log"  # 单一文件
+    - path: "/aaa/bbb/*.log"  # 所有以.log结尾的文件
+    - path: "/aaa/bbb/**/*.log"  # 所有子目录下以.log结尾的文件
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_runtime
+    inputs: initial   # 默认将initial_load加载的文件作为initial输入
+    output: parsed
+    # force_rerun: True
+    # cache: False
+
+  - processor: csv_multiplier
+    inputs: parsed
+    output: multiplied
+    params:
+      multiplier: 2.0
+
+final_output: 
+  - name: multiplied
