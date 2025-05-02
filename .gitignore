@@ -21,6 +21,6 @@ experiment_deepspeed/
 *.perf
 *.svg
 *.stacks
-experiments/
+/experiments/
 .expr_config
 pipelines/
