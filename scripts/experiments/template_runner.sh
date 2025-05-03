@@ -9,15 +9,52 @@ declare -A PARAM_POOL=(
     ["optim"]="adam sgd"
 )
 declare -a PARAM_ORDER=("script" "lr" "batch" "optim")  # 显式指定顺序
+# 信号处理函数
+# ================================================
+handle_interrupt() {
+    echo -e "\n[!] 捕获中断信号 (Ctrl+C)"
+    
+    # 优先转发信号给子进程
+    if [ -n "$child_pid" ]; then
+        echo "[*] 正在停止实验进程 (PID: $child_pid)..."
+        kill -SIGINT "$child_pid" 2>/dev/null
+        wait "$child_pid" 2>/dev/null
+    fi
+    
+    # 关闭所有监控
+    echo "[*] 正在停止监控进程..."
+    ${MONITOR_DIR}/monitors.sh stop --all
+    
+    exit 1
+}
 
+# 注册信号处理
+trap handle_interrupt SIGINT SIGTERM
 # 钩子函数实现区
 # ================================================
+MONITOR_DIR="../monitors"
 pre_param_group_hook() {
     echo "[PRE] 进入参数层级 $1: $2"
+
+    if [[ $1 == 0 ]]
+    then
+        # echo "script参数组：$2"
+        ${MONITOR_DIR}/monitors.sh clear --output alerts.log
+        ${MONITOR_DIR}/monitors.sh start --name cpu_alert --interval 2 --samples 3 --collector ${MONITOR_DIR}/data_collector.sh --collector-args "--metric mem --warning 90 --critical 95" --output alerts.log
+        ${MONITOR_DIR}/monitors.sh wait --name cpu_alert
+        ${MONITOR_DIR}/monitors.sh write --output alerts.log
+        ${MONITOR_DIR}/monitors.sh start --name cpu_alert --interval 2 --collector ${MONITOR_DIR}/data_collector.sh --collector-args "--metric mem --warning 90 --critical 95" --output alerts.log
+    fi
 }
 
 post_param_group_hook() {
     echo "[POST] 离开参数层级 $1: $2"
+
+    if [[ $1 == 0 ]]
+    then
+        # echo "script参数组：$2"
+        ${MONITOR_DIR}/monitors.sh stop --name cpu_alert
+    fi
 }
 
 # 执行实验逻辑
@@ -46,6 +83,12 @@ execute_experiment() {
         --batch-size "${batch}" \
         --optimizer "${optim}"
     
+    sleep 10
+    child_pid=$!
+    if [ -n "$child_pid" ]; then
+        wait "$child_pid"  # 等待进程完成
+    fi
+    child_pid=""       # 清空PID记录
     # 添加其他逻辑（如日志记录、状态检查等）
     echo "[完成] 参数组合执行完毕"
 }

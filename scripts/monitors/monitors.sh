@@ -9,6 +9,7 @@ usage() {
     echo "  $0 list"
     echo "  $0 clear  --output <file>         清空指定文件"
     echo "  $0 write --output <file> [--text \"内容\"]  向文件添加分割线"
+    echo "  $0 wait   --name <ID>           等待指定监控任务完成（如果带有samples参数）" 
     echo ""
     echo "示例:"
     echo "  # 传递CPU监控参数"
@@ -204,6 +205,65 @@ stop_monitor() {
     fi
 }
 
+# 新增wait_for_monitor函数
+wait_for_monitor() {
+    local name
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --name) name="$2"; shift 2 ;;
+            *) echo "未知参数: $1"; usage; exit 1 ;;
+        esac
+    done
+
+    if [[ -z "$name" ]]; then
+        echo "必须指定--name参数"
+        usage
+        exit 1
+    fi
+
+    local conf_file="$MONITOR_DIR/${name}.conf"
+    local pid_file="$MONITOR_DIR/${name}.pid"
+
+    if [[ ! -f "$conf_file" ]]; then
+        echo "监控任务 $name 不存在"
+        exit 1
+    fi
+
+    # 读取配置
+    unset args
+    source "$conf_file" || exit 1
+
+    if [[ -z "${args[samples]}" ]]; then
+        echo "监控任务 $name 没有设置samples参数，直接返回"
+        return 0
+    fi
+
+    if [[ ! -f "$pid_file" ]]; then
+        echo "监控任务 $name 的PID文件不存在，可能已经完成"
+        return 0
+    fi
+
+    local pid=$(cat "$pid_file" 2>/dev/null)
+    if [[ -z "$pid" ]]; then
+        echo "无法读取监控任务 $name 的PID"
+        return 1
+    fi
+
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "等待监控任务 $name 完成，samples=${args[samples]}..."
+        while kill -0 "$pid" 2>/dev/null; do
+            sleep 1
+        done
+        echo "监控任务 $name 已完成"
+    else
+        echo "监控任务 $name 的进程未在运行"
+        rm -f "$pid_file" "$conf_file"
+    fi
+
+    return 0
+}
+
+
 list_monitors() {
     printf "%-10s %-8s %-12s %-6s %s\n" "NAME" "PID" "INTERVAL" "SAMPLES" "OUTPUT"
     for conf in "$MONITOR_DIR"/*.conf; do
@@ -233,5 +293,6 @@ case $1 in
     list)  list_monitors ;;
     clear) shift; clear_file "$@" ;;
     write) shift; add_writer "$@" ;;
+    wait)  shift; wait_for_monitor "$@" ;;
     *)     usage ;;
 esac
