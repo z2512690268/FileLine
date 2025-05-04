@@ -3,10 +3,10 @@ from typing import Optional, Union, Dict, List
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from core.processing import ProcessorRegistry
+from core.processing import ProcessorRegistry, InputPath
 
 @ProcessorRegistry.register(name="plot_grouped_bar", input_type="single", output_ext=".pdf")
-def plot_grouped_bar(input_path: dict, output_path: Path,
+def plot_grouped_bar(input_path: InputPath, output_path: Path,
                      main_group_col: str,
                      sub_group_col: str,
                      value_col: str,
@@ -60,7 +60,7 @@ def plot_grouped_bar(input_path: dict, output_path: Path,
         其他参数与样例保持一致
     """
     # 读取数据
-    df = pd.read_csv(input_path["path"])
+    df = pd.read_csv(input_path.path)
     
     # 验证数据列
     for col in [main_group_col, sub_group_col, value_col]:

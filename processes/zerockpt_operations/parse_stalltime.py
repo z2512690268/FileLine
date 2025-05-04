@@ -1,14 +1,14 @@
 # from pathlib import Path
-from core.processing import ProcessorRegistry
+from core.processing import ProcessorRegistry, InputPath
 import pandas as pd
 from typing import List
 from pathlib import Path
 
 @ProcessorRegistry.register(name="parse_stalltime", input_type="single", output_ext=".csv")
-def parse_stalltime(input_path: dict, output_path: Path):
+def parse_stalltime(input_path: InputPath, output_path: Path):
     """解析运行日志文件
     """
-    with open(input_path["path"], 'r') as f:
+    with open(input_path.path, 'r') as f:
         content = f.read()
     
     # 解析所有的形如下面三行的日志，并记录到表格

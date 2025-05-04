@@ -4,6 +4,7 @@ from pathlib import Path
 from functools import wraps
 from typing import Dict, Callable, Union, List, Type, Optional, Set
 import hashlib
+from dataclasses import dataclass
 from .models import DataEntry, Tag
 from .storage import FileStorage
 
@@ -91,6 +92,11 @@ class ProcessorRegistry:
             raise KeyError(f"未注册的处理器: {name}")
         return cls._processors[name]
 
+@dataclass
+class InputPath:
+    path: Path
+    tags: List[str]
+    id: int
 
 class DataProcessor:
     def __init__(self, storage: FileStorage, db_session):
@@ -138,11 +144,11 @@ class DataProcessor:
     def _get_single_path(self, input_id: int) -> Path:
         """获取单个输入路径"""
         data = self.session.get(DataEntry, input_id)
-        entry = {
-            "path": Path(data.path),
-            "tags": [t.name for t in data.tags],
-            "id": data.id
-        }
+        entry = InputPath(
+            path=Path(data.path),
+            tags=[t.name for t in data.tags],
+            id=data.id
+        )
         return entry
 
     def _get_multiple_paths(self, input_ids: List[int]) -> List[dict]:
@@ -150,11 +156,13 @@ class DataProcessor:
         entries = []
         for i in input_ids:
             entry = self.session.get(DataEntry, i)
-            entries.append({
-                "path": Path(entry.path),
-                "tags": [t.name for t in entry.tags],
-                "id": entry.id
-            })
+            entries.append(
+                InputPath(
+                    path=Path(entry.path),
+                    tags=[t.name for t in entry.tags],
+                    id=entry.id
+                )
+            )
         return entries
     
     def _execute_processor(self, processor: dict, input_paths: Union[dict, List[dict]], params: dict) -> Path:

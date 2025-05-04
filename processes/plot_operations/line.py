@@ -2,10 +2,10 @@ from pathlib import Path
 from typing import Optional, Union
 import pandas as pd
 import matplotlib.pyplot as plt
-from core.processing import ProcessorRegistry
+from core.processing import ProcessorRegistry, InputPath
 
 @ProcessorRegistry.register(name="plot_loss_curve", input_type="single", output_ext=".pdf")
-def plot_loss_curve(input_path: dict, output_path: Path,
+def plot_loss_curve(input_path: InputPath, output_path: Path,
                    figsize: tuple = (10, 6),
                    time_col: str = "time",
                    loss_col: str = "loss",
@@ -56,7 +56,7 @@ def plot_loss_curve(input_path: dict, output_path: Path,
         legend_face/edgecolor: 图例背景/边框颜色
     """
     # 读取CSV数据
-    df = pd.read_csv(input_path["path"])
+    df = pd.read_csv(input_path.path)
     
     # 验证数据列存在
     for col in [time_col, loss_col]:
