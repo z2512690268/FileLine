@@ -154,6 +154,7 @@ class PipelineRunner:
         
         entries = []
         for file_path in matched_files:
+            file_tags[file_path].append(file_path)
             current_mtime = self._get_file_mtime(file_path)
             # 查询缓存记录
             cache = self.session.query(FileMTimeCache).filter(

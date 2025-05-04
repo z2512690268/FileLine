@@ -57,7 +57,6 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
         sub_group_gap: 子分组间距 (默认0.05)
         colors: 颜色列表或字典 (按子分组分配)
         aggregate_func: 数据聚合方式 ('mean', 'sum', 'first'等)
-        其他参数与样例保持一致
     """
     # 读取数据
     df = pd.read_csv(input_path.path)
