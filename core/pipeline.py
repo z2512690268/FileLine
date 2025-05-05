@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import fnmatch
+import re
 from sqlalchemy import func
 from .processing import DataProcessor, ProcessorRegistry
 from .models import DataEntry, Tag, StepCache, FileMTimeCache
@@ -30,6 +31,7 @@ class PipelineStep:
 class IncludeSpec:
     """单个包含模式的配置"""
     path: str              # Glob路径模式
+    re_pattern: Optional[str] = None  # 针对该模式的正则表达式
     tags: Optional[List[str]] = None  # 该模式独有的标签
 
 @dataclass
@@ -132,6 +134,15 @@ class PipelineRunner:
             pattern = spec.path
             tags = spec.tags or []
             matches = glob.glob(pattern, recursive=True)
+
+            # 正则二次过滤
+            if spec.re_pattern:
+                try:
+                    pattern = re.compile(spec.re_pattern)
+                    matches = [m for m in matches if pattern.search(m)]
+                except re.error as e:
+                    raise ValueError(f"无效的正则表达式 '{spec.re_pattern}': {e}")
+
             all_included.update(matches)
             for file in matches:
                 file_tags.setdefault(file, []).extend(tags)

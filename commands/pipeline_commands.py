@@ -67,7 +67,7 @@ def run(config_file, global_config, debug):
     
     # 解析初始加载配置
     load_config = InitialLoadConfig(
-        include_patterns=[IncludeSpec(path=p["path"], tags=p.get("tags", [])) for p in config["initial_load"]["include"]],
+        include_patterns=[IncludeSpec(path=p["path"], re_pattern=p.get("regex", []), tags=p.get("tags", [])) for p in config["initial_load"]["include"]],
         exclude_patterns=config["initial_load"].get("exclude", []),
         data_type=config["initial_load"].get("type", "raw"),
         tags=config["initial_load"].get("global_tags", [])
