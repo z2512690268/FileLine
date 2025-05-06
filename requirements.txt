@@ -1,0 +1,9 @@
+click
+numpy
+pandas
+matplotlib
+seaborn
+tabulate
+pyyaml
+sqlalchemy
+uuid

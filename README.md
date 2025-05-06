@@ -59,3 +59,85 @@
         --debug / --no-debug
         --help                Show this message and exit.
     ```
+
+## 功能介绍
+
+- data 数据相关功能, 负责追踪数据的历史版本，管理数据标签等功能
+
+    ```
+    add           添加原始数据文件
+        main.py data add [OPTIONS] FILE_PATH
+            Options:
+                --description TEXT  数据描述信息
+
+    list-recent   显示最近的实验数据条目
+        main.py data list-recent [OPTIONS]
+            Options:
+                --limit INTEGER  显示最近的记录数量  [default: 5]
+
+    show          根据条件展示数据条目
+        main.py data show [OPTIONS]
+            Options:
+                -i, --id INTEGER             筛选指定ID的数据
+                -t, --tag TEXT               筛选包含指定标签的数据
+                --type [raw|processed|plot]  按数据类型筛选
+                --limit INTEGER              最大显示条目数  [default: 20]
+    ```
+
+- experiment 实验相关功能，支持为每个实验建立独立的数据库和目录，方便调试运行/有效绘图分离，以及不同实验之间的隔离。
+
+    ```
+    create  创建新实验
+        main.py experiment create [OPTIONS] NAME
+            Options:
+                --description TEXT  实验描述
+    delete  删除实验
+        main.py experiment delete [OPTIONS] NAME
+    list    列出所有实验
+        main.py experiment list [OPTIONS]
+    use     切换当前实验
+        main.py experiment use [OPTIONS] NAME
+    ```
+
+- pipeline 流水线相关功能， 支持将一系列数据处理操作组合成流水线，并自动缓存已处理过的操作，避免重复处理。所有的prcessor都应当使用ProcessorRegistry.register注解进行注册, 并实现在proceses目录下。
+
+    ```
+    run
+        main.py pipeline run [OPTIONS] CONFIG_FILE
+            Options:
+                --global-config PATH  全局配置文件路径（包含变量定义）
+                --debug / --no-debug
+    ```
+- process 单独调用处理操作。用于测试单processor的接口。
+
+    ```
+    run
+        main.py process run [OPTIONS] PROCESSOR_NAME INPUT_IDS
+            Options:
+                -p, --param TEXT  处理参数，格式：key=value
+    ···
+
+## 开发教程
+
+- 实现自定义processor
+
+    - 遵循约定的参数格式：输入文件描述，输出文件路径，以及其他任意的处理参数。
+
+    - 使用ProcessorRegistry.register注解进行注册。指明processord的名称，processor的类型（单输入单输出single/多输入单输出multi），输出文件的后缀名类型（默认.csv）。
+
+- 在pipeline配置文件中调用自定义processor
+
+    - 首先配置initial_load部分的原始输入文件列表，通过include部分，指定一个或多组使用通配符*和?、[]等匹配的Posix路径名模式，匹配到的文件将被加载到pipeline的初始输入文件列表中，保存为initial变量。支持通过regex子表达式进行进一步匹配，实现完备的路径匹配。
+
+    - 随后依次定义pipeline的各个processor，每个stage包含一个processor的名称，以及该processor的输入文件变量名，输出变量名，以及其他任意的处理参数。（要求需要符合single和multi两种类型processor的输入输出要求）
+
+    - 最后定义导出文件名，将最终输出的文件导出为想要的名称（因为系统内部使用uuid保存以避免重名情况，所以需要用到导出功能实现导出到想要的文件名）
+
+
+## TODO
+
+- 通过支持自定义输入匹配函数，支持更复杂的输入路径模式匹配，比如匹配一个目录下最新的时间戳。
+
+- 支持自动根据生成的图像导出该图像的处理历史图示，便于追溯数据处理过程。
+
+- 完善并增加更多常用的绘图函数，数据处理函数等，兼容通用化。
