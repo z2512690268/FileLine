@@ -1,7 +1,9 @@
 initial_load:
   include: 
-    - path: "/aaa/bbb/*.log"  # 所有以.log结尾的文件
-    - tags: [test]
+    - path: "/aaa/bbb/*/*.log"  # 所有以.log结尾的文件
+      regex: "/aaa/bbb/[0-9]{4}/[A-Za-z0-9_]+.log"  # 匹配文件名
+      latest: "/aaa/bbb/{mm}{dd}/*.log" # 匹配时间戳最新的文件
+      tags: [test]
   type: raw
   global_tags: [origin]
 
