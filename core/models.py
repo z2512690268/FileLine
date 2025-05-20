@@ -18,6 +18,7 @@ class DataEntry(Base):
     id = Column(Integer, primary_key=True)
     type = Column(String(20))  # raw/processed/plot
     path = Column(String(256))
+    original_path = Column(String(256))  # 原始路径, 可选
     timestamp = Column(DateTime, default=datetime.now)
     description = Column(String(256))
     

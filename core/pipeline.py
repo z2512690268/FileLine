@@ -183,6 +183,7 @@ class PipelineRunner:
                 entry = DataEntry(
                     type=config.data_type,
                     path=str(stored_path),
+                    original_path=str(file_path),
                     description=f"自动加载自: {file_path}",
                     tags=[]
                 )

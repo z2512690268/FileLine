@@ -95,6 +95,7 @@ class ProcessorRegistry:
 @dataclass
 class InputPath:
     path: Path
+    original_path: Optional[Path]
     tags: List[str]
     id: int
 
@@ -146,6 +147,7 @@ class DataProcessor:
         data = self.session.get(DataEntry, input_id)
         entry = InputPath(
             path=Path(data.path),
+            original_path=Path(data.original_path) if data.original_path else None,
             tags=[t.name for t in data.tags],
             id=data.id
         )
@@ -159,6 +161,7 @@ class DataProcessor:
             entries.append(
                 InputPath(
                     path=Path(entry.path),
+                    original_path=Path(entry.original_path) if entry.original_path else None,
                     tags=[t.name for t in entry.tags],
                     id=entry.id
                 )
