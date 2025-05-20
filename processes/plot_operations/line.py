@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, Dict
 import pandas as pd
 import matplotlib.pyplot as plt
 from core.processing import ProcessorRegistry, InputPath
@@ -9,11 +9,12 @@ def plot_loss_curve(input_path: InputPath, output_path: Path,
                    figsize: tuple = (10, 6),
                    time_col: str = "time",
                    loss_col: str = "loss",
+                   tag_col: Optional[str] = None,  # 新增分组列名参数
+                   tag_colors: Union[str, Dict[str, str]] = "auto",  # 颜色字典或预设值
+                   tag_line_styles: Union[str, Dict[str, str]] = "-",  # 线型字典或预设值
                    title: str = "Training Loss Curve",
                    xlabel: str = "Time (s)",
                    ylabel: str = "Loss",
-                   line_color: str = "blue",
-                   line_style: str = "-",
                    grid: bool = True,
                    dpi: int = 300,
                    xlim: tuple = None,
@@ -22,7 +23,6 @@ def plot_loss_curve(input_path: InputPath, output_path: Path,
                    yticks_num: int = None,
                    xticks_rotation: float = 0,
                    yticks_rotation: float = 0,
-                   # 新增字体参数
                    title_fontsize: int = 14,
                    title_fontfamily: Optional[str] = None,
                    xlabel_fontsize: int = 12,
@@ -33,7 +33,6 @@ def plot_loss_curve(input_path: InputPath, output_path: Path,
                    xticks_fontfamily: Optional[str] = None,
                    yticks_fontsize: Optional[int] = None,
                    yticks_fontfamily: Optional[str] = None,
-                   # 新增图例参数
                    legend_loc: Union[str, tuple] = "best",
                    legend_title: Optional[str] = None,
                    legend_fontsize: Optional[int] = None,
@@ -42,35 +41,55 @@ def plot_loss_curve(input_path: InputPath, output_path: Path,
                    legend_frameon: bool = True,
                    legend_facecolor: Optional[str] = None,
                    legend_edgecolor: Optional[str] = None):
-    """绘制Loss-Time曲线（支持字体和图例自定义）
+    """绘制分组Loss-Time曲线
     
     新增参数说明:
-        title_fontsize/family: 标题字号和字体
-        xlabel/ylabel_fontsize/family: 坐标轴标签字号字体
-        xticks/yticks_fontsize/family: 刻度标签字号字体
-        legend_loc: 图例位置（'best', 'upper right'等）
-        legend_title: 图例标题
-        legend_fontsize/family: 图例文字字号字体
-        legend_shadow: 是否显示阴影
-        legend_frameon: 是否显示边框
-        legend_face/edgecolor: 图例背景/边框颜色
+        tag_col: 用于分组的列名（如不同实验组）
+        tag_colors: 颜色配置（"auto"使用默认颜色循环，或传入{tag值:颜色}字典）
+        tag_line_styles: 线型配置（统一线型或{tag值:线型}字典）
     """
     # 读取CSV数据
     df = pd.read_csv(input_path.path)
     
-    # 验证数据列存在
-    for col in [time_col, loss_col]:
+    # 验证必要列存在
+    required_cols = [time_col, loss_col]
+    if tag_col:
+        required_cols.append(tag_col)
+    for col in required_cols:
         if col not in df.columns:
             raise ValueError(f"CSV文件中缺少必要列: {col}")
-    
+
     # 创建画布
     plt.figure(figsize=figsize)
     
-    # 绘制曲线
-    plt.plot(df[time_col], df[loss_col],
-             color=line_color,
-             linestyle=line_style,
-             label=f"{loss_col} curve")
+    # 处理分组逻辑
+    if tag_col:
+        # 自动生成颜色映射
+        if tag_colors == "auto":
+            unique_tags = df[tag_col].unique()
+            color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+            tag_colors = {tag: color_cycle[i % len(color_cycle)] 
+                        for i, tag in enumerate(unique_tags)}
+        # 统一颜色处理
+        elif isinstance(tag_colors, str):
+            tag_colors = {tag: tag_colors for tag in df[tag_col].unique()}
+            
+        # 统一线型处理
+        if isinstance(tag_line_styles, str):
+            tag_line_styles = {tag: tag_line_styles for tag in df[tag_col].unique()}
+
+        # 分组绘制曲线
+        for tag_value, group in df.groupby(tag_col):
+            plt.plot(group[time_col], group[loss_col],
+                    color=tag_colors.get(tag_value, None),
+                    linestyle=tag_line_styles.get(tag_value, "-"),
+                    label=f"{tag_value}")
+    else:
+        # 单线模式
+        plt.plot(df[time_col], df[loss_col],
+                 color=tag_colors if isinstance(tag_colors, str) else None,
+                 linestyle=tag_line_styles,
+                 label=f"{loss_col} curve")
 
     # 设置坐标轴范围
     if xlim is not None:
