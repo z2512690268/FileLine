@@ -4,7 +4,7 @@ import pandas as pd
 from typing import List
 from pathlib import Path
 
-@ProcessorRegistry.register(name="parse_runtime", input_type="single", output_ext=".csv")
+@ProcessorRegistry.register(input_type="single", output_ext=".csv")
 def parse_runtime(input_path: InputPath, output_path: Path):
     """解析运行日志文件
     """

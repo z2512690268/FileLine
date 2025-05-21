@@ -4,7 +4,7 @@ import pandas as pd
 from typing import List
 from pathlib import Path
 
-@ProcessorRegistry.register(name="filter_accuracy_line", input_type="single", output_ext=".csv")
+@ProcessorRegistry.register(input_type="single", output_ext=".csv")
 def filter_accuracy_line(input_path: InputPath, output_path: Path):
     """
     将两个文件的loss整理为用于绘制线图的形式

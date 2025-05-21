@@ -25,14 +25,25 @@ class ProcessorRegistry:
         return decorator
 
     @classmethod
-    def register(cls, name: str, input_type: str = "single", output_ext: str = ".txt"):
+    def register(cls, name: Optional[str] = None, input_type: str = "single", output_ext: str = ".txt"):
         """注册处理函数的装饰器
         
         Args:
             name: 处理器名称
             input_type: 输入类型 (single/multi)
         """
+        # 验证input_type参数
+        if input_type not in {"single", "multi"}:
+            raise ValueError(f"无效的input_type：{input_type}，必须是'single'或'multi'")
+        # 处理output_ext，确保以点开头
+        if not output_ext.startswith("."):
+            output_ext = f".{output_ext}"
         def decorator(func: Callable):
+            _name = name  # 使用 _name 避免修改闭包变量
+            if _name is None:
+                _name = func.__name__
+            if _name in cls._processors:
+                raise ValueError(f"处理器 {_name} 已注册")
             sig = inspect.signature(func)
             func_hash = cls._calculate_hash(func)
 
@@ -40,7 +51,7 @@ class ProcessorRegistry:
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
             
-            cls._processors[name] = {
+            cls._processors[_name] = {
                 "func": wrapper,
                 "input_type": input_type,
                 "output_ext": output_ext,

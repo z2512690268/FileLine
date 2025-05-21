@@ -4,8 +4,8 @@ import pandas as pd
 from typing import List
 from pathlib import Path
 
-@ProcessorRegistry.register(name="parse_multi_runtime", input_type="multi", output_ext=".csv")
-def parse_runtime(input_paths: List[InputPath], output_path: Path):
+@ProcessorRegistry.register(input_type="multi", output_ext=".csv")
+def parse_multi_stalltime(input_paths: List[InputPath], output_path: Path):
     """解析运行日志文件
     """
     file_data = []

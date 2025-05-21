@@ -90,6 +90,9 @@ class PipelineRunner:
                     print("-------------------------------------------")
                 continue
                 
+            if debug:
+                print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
+
             entry = processor.run(
                 processor_name=step.processor,
                 input_ids=resolved_ids,
@@ -108,7 +111,6 @@ class PipelineRunner:
                 shutil.copy(entry.path, export_path)
             
             if debug:
-                print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
                 print("Generated Output ID: ", entry.id)
                 print("Generated Output Path: ", entry.path) 
                 if step.export:
