@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from core.processing import ProcessorRegistry, InputPath
 
-@ProcessorRegistry.register(name="plot_loss_curve", input_type="single", output_ext=".pdf")
+@ProcessorRegistry.register(input_type="single", output_ext=".pdf")
 def plot_loss_curve(input_path: InputPath, output_path: Path,
                    figsize: tuple = (10, 6),
                    time_col: str = "time",
