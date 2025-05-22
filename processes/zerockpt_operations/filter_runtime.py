@@ -5,7 +5,7 @@ from typing import List
 from pathlib import Path
 
 @ProcessorRegistry.register(input_type="single", output_ext=".csv")
-def filter_runtime(input_path: InputPath, output_path: Path, type: str = "throughput"):
+def filter_runtime(input_path: InputPath, output_path: Path, type: str = "throughput_std", num_steps: int = None):
     """
     将两个文件的loss整理为用于绘制线图的形式
     """
@@ -35,9 +35,14 @@ def filter_runtime(input_path: InputPath, output_path: Path, type: str = "throug
     # 删除file_path列
     df.drop(columns=['file_path'], inplace=True)
 
-    if type == "throughput":
+    if type == "throughput_std":
         # 只保留batch_size * step 值为300的行
         df = df[df['batch_size'] * df['step'] == 300]
+    elif type == "throughput_global":
+        # 只保留最后一个step的throughput
+        if num_steps is None:
+            df = df[df['num_steps'] == num_steps]
+        df = df[df['step'] == num_steps]
     elif type == "loss":
         # 只保留batch_size * step 值为300的step处前后10个step的loss的平均值
         # 分组维度（确保独立处理不同实验配置）
