@@ -51,6 +51,8 @@ def show_cmd(id, tag, type, limit):
             click.echo(f"  路径: {entry.path}")
             click.echo(f"  类型: {entry.type.upper()}")
             click.echo(f"  描述: {desc}")
+            parents_ids = [p.id for p in entry.parents]
+            click.echo(f"  父记录: {', '.join(str(p) for p in parents_ids) or '无'}")
             click.echo(f"  时间: {format_ts(entry.timestamp)}")
             click.echo(f"  标签: {tags}")
             click.echo("-" * 60)

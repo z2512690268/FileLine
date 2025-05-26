@@ -131,10 +131,10 @@ class DataProcessor:
                 if len(input_ids) != 1:
                     raise ValueError("单个输入类型只能输入单个数据记录")
                 input_ids = input_ids[0]
-            input_path = self._get_single_path(input_ids)
+            input_path, entries = self._get_single_path(input_ids)
             output_path, result_tags = self._execute_processor(processor, input_path, params)
         elif input_type == "multi":
-            input_paths = self._get_multiple_paths(input_ids)
+            input_paths, entries = self._get_multiple_paths(input_ids)
             output_path, result_tags = self._execute_processor(processor, input_paths, params)
         else:
             raise ValueError(f"未知输入类型: {input_type}")
@@ -143,6 +143,7 @@ class DataProcessor:
         entry = DataEntry(
             type='processed',
             path=str(output_path),
+            parents=entries,
             description=f"Processed by {processor_name}, id: {input_ids}, params: {params}"
         )
 
@@ -162,11 +163,12 @@ class DataProcessor:
             tags=[t.name for t in data.tags],
             id=data.id
         )
-        return entry
+        return entry, [data]
 
     def _get_multiple_paths(self, input_ids: List[int]) -> List[dict]:
         """获取多个输入路径及元数据"""
         entries = []
+        datas = []
         for i in input_ids:
             entry = self.session.get(DataEntry, i)
             entries.append(
@@ -177,7 +179,8 @@ class DataProcessor:
                     id=entry.id
                 )
             )
-        return entries
+            datas.append(entry)
+        return entries, datas
     
     def _execute_processor(self, processor: dict, input_paths: Union[dict, List[dict]], params: dict) -> Path:
         """执行处理函数"""

@@ -5,7 +5,7 @@ from typing import List
 from pathlib import Path
 
 @ProcessorRegistry.register(input_type="single", output_ext=".csv")
-def filter_accuracy_line(input_path: InputPath, output_path: Path):
+def filter_accuracy_line(input_path: InputPath, output_path: Path, ckpt_sol : str = None):
     """
     将两个文件的loss整理为用于绘制线图的形式
     """
@@ -14,4 +14,6 @@ def filter_accuracy_line(input_path: InputPath, output_path: Path):
     df = pd.read_csv(input_path)
     # df file_path列如果有before, 则tag列为before, 否则为after
     df["tag"] = df["file_path"].apply(lambda x: "before" if "before" in x else "after")
+    if ckpt_sol is not None:
+        df = df[df["ckpt_sol"] == ckpt_sol]
     df.to_csv(output_path, index=False)
