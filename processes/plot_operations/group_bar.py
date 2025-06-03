@@ -65,24 +65,14 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                      legend_edgecolor: Optional[str] = None,
                      # 数据聚合参数
                      aggregate_func: str = 'mean'):
-    """绘制分组柱状图（支持四维变量：主分组、子分组、行分组和列分组）
-
-    新增参数说明:
-        row_col: 行方向的分组列名（可选）
-        col_col: 列方向的分组列名（可选）
-        row_order: 行分组的顺序（列表）
-        col_order: 列分组的顺序（列表）
-        row_labels: 行分组标签的字典
-        col_labels: 列分组标签的字典
-        subplot_title_fontsize: 子图标题字体大小
-        subplot_title_fontfamily: 子图标题字体
-    """
+    """绘制分组柱状图（支持四维变量：主分组、子分组、行分组和列分组）"""
 
     # 读取数据
     df = pd.read_csv(input_path.path)
     
     # 验证数据列
-    for col in [main_group_col, sub_group_col, value_col]:
+    required_cols = [main_group_col, sub_group_col, value_col]
+    for col in required_cols:
         if col not in df.columns:
             raise ValueError(f"CSV文件中缺少必要列: {col}")
     
@@ -98,7 +88,6 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
         missing_main = set(main_group_order) - set(existing_main)
         if missing_main:
             raise ValueError(f"main_group_order中的以下值在数据中不存在: {missing_main}")
-        df = df[df[main_group_col].isin(main_group_order)]
         main_groups = list(main_group_order)
     else:
         main_groups = sorted(df[main_group_col].unique())
@@ -109,7 +98,6 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
         missing_sub = set(sub_group_order) - set(existing_sub)
         if missing_sub:
             raise ValueError(f"sub_group_order中的以下值在数据中不存在: {missing_sub}")
-        df = df[df[sub_group_col].isin(sub_group_order)]
         sub_groups = list(sub_group_order)
     else:
         sub_groups = sorted(df[sub_group_col].unique())
@@ -122,7 +110,6 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
             missing_row = set(row_order) - set(existing_row)
             if missing_row:
                 raise ValueError(f"row_order中的以下值在数据中不存在: {missing_row}")
-            df = df[df[row_col].isin(row_order)]
             row_groups = list(row_order)
         else:
             row_groups = sorted(df[row_col].unique())
@@ -137,7 +124,6 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
             missing_col = set(col_order) - set(existing_col)
             if missing_col:
                 raise ValueError(f"col_order中的以下值在数据中不存在: {missing_col}")
-            df = df[df[col_col].isin(col_order)]
             col_groups = list(col_order)
         else:
             col_groups = sorted(df[col_col].unique())
@@ -153,11 +139,21 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
     elif isinstance(colors, list):
         colors = colors * ((len(sub_groups) // len(colors)) + 1)[:len(sub_groups)]
     
-    # 计算布局参数
+    # 全局计算布局参数 - 确保所有子图使用相同的x轴位置
     m = len(sub_groups)
     total_width_per_main_group = m * bar_width + (m - 1) * sub_group_gap
-    x_main = np.arange(len(main_groups)) * (total_width_per_main_group + main_group_gap)
-    offsets = (np.arange(m) - (m-1)/2) * (bar_width + sub_group_gap)
+    x_main_global = np.arange(len(main_groups)) * (total_width_per_main_group + main_group_gap)
+    offsets_global = (np.arange(m) - (m-1)/2) * (bar_width + sub_group_gap)
+    
+    # 计算全局x轴范围
+    x_min_global = x_main_global[0] - (total_width_per_main_group + main_group_gap) * 0.5
+    x_max_global = x_main_global[-1] + (total_width_per_main_group + main_group_gap) * 0.5
+    
+    # 统一的x轴标签
+    if main_group_labels:
+        xtick_labels = [main_group_labels.get(mg, mg) for mg in main_groups]
+    else:
+        xtick_labels = main_groups
 
     # 创建图例句柄
     handles = [
@@ -183,7 +179,7 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
         for r, row_val in enumerate(row_groups):
             for c, col_val in enumerate(col_groups):
                 # 筛选当前子集的数据
-                sub_df = df
+                sub_df = df.copy()
                 if row_col and row_val is not None:
                     sub_df = sub_df[sub_df[row_col] == row_val]
                 if col_col and col_val is not None:
@@ -198,28 +194,32 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                     ax.text(0.5, 0.5, "No Data", ha='center', va='center')
                     continue
                 
-                # 在当前坐标系中绘制柱状图
+                # 确保所有子图有相同的x轴位置，即使某些分组数据缺失
                 for j, sg in enumerate(sub_groups):
                     color = colors[j]
                     for i, mg in enumerate(main_groups):
+                        # 检查数据是否存在
                         mask = (sub_df[main_group_col] == mg) & (sub_df[sub_group_col] == sg)
                         if not mask.any():
+                            # 没有数据，跳过但不改变位置
                             continue
+                            
                         y = sub_df[mask][value_col].agg(aggregate_func)
-                        x = x_main[i] + offsets[j]
+                        x = x_main_global[i] + offsets_global[j]
                         ax.bar(x, y, bar_width, color=color)
                 
-                # 设置主分组标签
-                if main_group_labels:
-                    xtick_labels = [main_group_labels.get(mg, mg) for mg in main_groups]
-                else:
-                    xtick_labels = main_groups
-                ax.set_xticks(x_main)
+                # 在所有子图中使用相同的x轴刻度和标签
+                ax.set_xticks(x_main_global)
                 ax.set_xticklabels(xtick_labels, rotation=xticks_rotation)
                 
                 # 设置坐标轴范围
-                if xlim: ax.set_xlim(xlim)
-                if ylim: ax.set_ylim(ylim)
+                if xlim:
+                    ax.set_xlim(xlim)
+                else:
+                    ax.set_xlim(x_min_global, x_max_global)
+                    
+                if ylim:
+                    ax.set_ylim(ylim)
                 else:
                     # 自动调整y轴范围包含0点
                     ymin, ymax = ax.get_ylim()
@@ -228,10 +228,10 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                     elif ymax < 0:
                         ax.set_ylim(ymin * 1.05, 0)
                 
-                # 添加分隔线
+                # 在所有子图中使用相同的分隔线位置
                 if show_main_group_separators and len(main_groups) > 1:
                     separators_x = [
-                        (x_main[i] + x_main[i+1]) / 2
+                        (x_main_global[i] + x_main_global[i+1]) / 2
                         for i in range(len(main_groups)-1)
                     ]
                     for x in separators_x:
@@ -305,7 +305,7 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
         # 非子图模式 - 原逻辑
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
         
-        # 绘制柱状图
+        # 使用全局布局参数
         for j, sg in enumerate(sub_groups):
             color = colors[j]
             for i, mg in enumerate(main_groups):
@@ -313,25 +313,32 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                 if not mask.any():
                     continue
                 y = df[mask][value_col].agg(aggregate_func)
-                x = x_main[i] + offsets[j]
+                x = x_main_global[i] + offsets_global[j]
                 ax.bar(x, y, bar_width, color=color)
         
-        # 设置主分组标签
-        if main_group_labels:
-            xtick_labels = [main_group_labels.get(mg, mg) for mg in main_groups]
-        else:
-            xtick_labels = main_groups
-        ax.set_xticks(x_main)
+        # 使用全局标签
+        ax.set_xticks(x_main_global)
         ax.set_xticklabels(xtick_labels, rotation=xticks_rotation)
         
         # 设置坐标轴范围
-        if xlim: ax.set_xlim(xlim)
-        if ylim: ax.set_ylim(ylim)
+        if xlim: 
+            ax.set_xlim(xlim)
+        else:
+            ax.set_xlim(x_min_global, x_max_global)
+            
+        if ylim: 
+            ax.set_ylim(ylim)
+        else:
+            ymin, ymax = ax.get_ylim()
+            if ymin > 0:
+                ax.set_ylim(0, ymax * 1.05)
+            elif ymax < 0:
+                ax.set_ylim(ymin * 1.05, 0)
         
         # 添加分隔线
         if show_main_group_separators and len(main_groups) > 1:
             separators_x = [
-                (x_main[i] + x_main[i+1]) / 2
+                (x_main_global[i] + x_main_global[i+1]) / 2
                 for i in range(len(main_groups)-1)
             ]
             for x in separators_x:
@@ -387,4 +394,4 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
     plt.savefig(output_path, bbox_inches='tight')
     plt.close()
 
-    return ["auto_plot", "grouped_bar", f"dpi_{dpi}"]
+    return ["auto_plot", "grouped_bar", f"dpi_{dpi}", f"subplots_{nrows}x{ncols}"]
