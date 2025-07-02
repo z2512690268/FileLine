@@ -1,13 +1,13 @@
 from pathlib import Path
 from core.processing import ProcessorRegistry, InputPath
 import pandas as pd
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import re
 from datetime import datetime
 import time
 
 @ProcessorRegistry.register(input_type="multi", output_ext=".parquet")
-def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_path: Path, basename_type: str = "default") -> pd.DataFrame:
+def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_path: Path, basename_type: str = "default", record_type: Optional[str] = None) -> pd.DataFrame:
     """解析多个运行日志文件并提取性能数据，支持AdamW Callback日志"""
     # 定义所有的正则表达式模式
     patterns = {
@@ -18,6 +18,7 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
         'stall': r'- Stall time: ([\d\.]+)s, ([\d\.]+), ([\d\.]+)',
         'grad_stall': r'- grad stall time: ([\d\.]+)s, ([\d\.]+), ([\d\.]+)',
         'full_stall': r'Full Stall time: ([\d\.]+)s, ([\d\.]+), ([\d\.]+)',
+        'full_stall_without_timestamp': r'Full Stall time: ([\d\.]+)s',
         'real_stall': r'Real Stall time: ([\d\.]+)s, ([\d\.]+), ([\d\.]+)',
     }
     
@@ -34,6 +35,7 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
         file_meta = {
             'model_name': file_meta_parts[0] if len(file_meta_parts) > 0 else 'unknown',
             'ckpt_type': file_meta_parts[1] if len(file_meta_parts) > 1 else 'unknown',
+            'ckpt_freq': file_meta_parts[3] if len(file_meta_parts) > 3 else 'unknown',
             'file_name': basename
         }
         
@@ -54,6 +56,7 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
                     data_point = {
                         'model_name': file_meta['model_name'],
                         'ckpt_type': file_meta['ckpt_type'],
+                        'ckpt_freq': file_meta['ckpt_freq'],
                         'file_name': file_meta['file_name'],
                         'record_type': None,
                         'timestamp': None,
@@ -149,6 +152,18 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
                         }
                         all_data.append(stall_record)
                         continue
+
+                    full_stall_without_timestamp_match = re.search(patterns['full_stall_without_timestamp'], line_remaining)
+                    if full_stall_without_timestamp_match:
+                        stall_record = {
+                            **data_point,
+                            'record_type': 'Full Stall',
+                            'stall_duration': float(full_stall_without_timestamp_match.group(1)),
+                            'stall_start': None,
+                            'stall_end': None
+                        }
+                        all_data.append(stall_record)
+                        continue
                     
                     # 6. 处理Real Stall（创建独立记录）
                     real_stall_match = re.search(patterns['real_stall'], line_remaining)
@@ -186,6 +201,9 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
     if not df.empty and 'unix_timestamp' in df.columns:
         df = df.sort_values('unix_timestamp')
     
+    if record_type is not None:
+        df = df[df['record_type'] == record_type]
+
     # 保存到Parquet
     if not df.empty:
         df.to_parquet(output_path)

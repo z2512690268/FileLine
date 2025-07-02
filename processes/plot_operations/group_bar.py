@@ -68,8 +68,11 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
     """绘制分组柱状图（支持四维变量：主分组、子分组、行分组和列分组）"""
 
     # 读取数据
-    df = pd.read_csv(input_path.path)
-    
+    if ".csv" in str(input_path.path):
+        df = pd.read_csv(input_path.path)
+    elif ".parquet" in str(input_path.path):
+        df = pd.read_parquet(input_path.path)
+    print("ckpt_type列中唯一值:", df["ckpt_type"].unique())
     # 验证数据列
     required_cols = [main_group_col, sub_group_col, value_col]
     for col in required_cols:

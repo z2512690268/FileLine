@@ -56,7 +56,10 @@ def plot_horizontal_bar(
         label_padding: 数值标签内边距
     """
     # 读取数据
-    df = pd.read_csv(input_path.path)
+    if ".csv" in str(input_path.path):
+        df = pd.read_csv(input_path.path)
+    elif ".parquet" in str(input_path.path):
+        df = pd.read_parquet(input_path.path)
     
     # 验证数据列
     for col in [y_col, value_col]:

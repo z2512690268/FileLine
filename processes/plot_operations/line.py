@@ -49,7 +49,10 @@ def plot_loss_curve(input_path: InputPath, output_path: Path,
         tag_line_styles: 线型配置（统一线型或{tag值:线型}字典）
     """
     # 读取CSV数据
-    df = pd.read_csv(input_path.path)
+    if ".csv" in str(input_path.path):
+        df = pd.read_csv(input_path.path)
+    elif ".parquet" in str(input_path.path):
+        df = pd.read_parquet(input_path.path)
     
     # 验证必要列存在
     required_cols = [time_col, loss_col]

@@ -62,7 +62,10 @@ def plot_timeline_hbar(
     默认自动为每个子类别分配唯一的颜色
     """
     # 读取数据
-    df = pd.read_parquet(input_path.path)
+    if ".csv" in str(input_path.path):
+        df = pd.read_csv(input_path.path)
+    elif ".parquet" in str(input_path.path):
+        df = pd.read_parquet(input_path.path)
     
     # 验证数据列
     required_cols = [category_col, sub_category_col, start_col, end_col]

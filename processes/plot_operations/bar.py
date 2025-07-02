@@ -46,7 +46,10 @@ def plot_bar(input_path: InputPath, output_path: Path,
         aggregate_func: 数据聚合方式 ('mean', 'sum', 'first'等)
     """
     # 读取数据
-    df = pd.read_csv(input_path.path)
+    if ".csv" in str(input_path.path):
+        df = pd.read_csv(input_path.path)
+    elif ".parquet" in str(input_path.path):
+        df = pd.read_parquet(input_path.path)
     
     # 验证数据列
     for col in [x_col, value_col]:
