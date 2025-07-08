@@ -1,0 +1,3 @@
+CKPT_PATH=/hy-tmp/checkpoint
+PROJECT_ROOT=/root/ZeroCkpt
+MODELSCOPE_PATH=/hy-tmp/modelscope  # If Use Default Path, set to None
