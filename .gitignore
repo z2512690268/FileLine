@@ -27,3 +27,4 @@ experiment_deepspeed/
 .expr_config
 pipelines/
 dummy
+*.gpumon
