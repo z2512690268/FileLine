@@ -48,12 +48,21 @@ def filter_single_save(input_path: InputPath, output_path: Path, start_step: int
     
     # 3. 处理Transfer类数据
     # 使用Stall信息，如果Stall信息在Step中
+    # 已废止
     if 'stall_duration' in df_range.columns:
         transfer_df = df_range[(df_range['record_type'] == 'Step') & (df_range['stall_duration'] > 0)][[
             'step', 'stall_duration', 'stall_start', 'stall_end', 'timestamp', 'grad_stall_duration', 'grad_stall_start', 'grad_stall_end'
         ]].copy()
         transfer_df['event_type'] = 'Transfer'
         transfer_df['duration'] = transfer_df['stall_duration']
+    
+    # 增加 t_df 含有低优先级队列和高优先级队列的信息
+    t_df = df_range[df_range['record_type'].isin(['LPT', 'HPT'])][[
+        'step', 'total_time', 'timestamp', 'record_type'
+    ]].copy()
+    t_df['event_type'] = 'Transfer'
+    t_df['duration'] = t_df['total_time']
+    
 
     
     # 4. 处理Background类数据
@@ -116,7 +125,7 @@ def filter_single_save(input_path: InputPath, output_path: Path, start_step: int
         background_df['step'] = background_df['end_step'].astype(int)
     
     # 为所有数据添加通用字段
-    for df_part in [compute_df, transfer_df, background_df]:
+    for df_part in [compute_df, t_df, background_df]:  # 取消了transfer_df
         if not df_part.empty:
             # 确保所有DataFrame都有step列
             if 'step' not in df_part.columns:

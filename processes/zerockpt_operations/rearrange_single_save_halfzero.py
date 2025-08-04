@@ -6,7 +6,7 @@ import numpy as np
 from typing import List
 
 @ProcessorRegistry.register(input_type="single", output_ext=".parquet")
-def rearrange_single_save(
+def rearrange_single_save_halfzero(
     input_path: InputPath, 
     output_path: Path
 ):
@@ -129,69 +129,6 @@ def rearrange_single_save(
                 "step": row['step']
             })
     
-    # 5. 处理Transfer事件 - 修复缺失问题
-    # transfer_df = df[df['event_type'] == 'Transfer']
-    # for _, row in transfer_df.iterrows():
-    #     # 处理数据停滞时间
-    #     if 'stall_duration' in row and isinstance(row['stall_duration'], (float, int)) and row['stall_duration'] > 0:
-    #         if 'stall_start' in row and isinstance(row['stall_start'], datetime):
-    #             start_time = row['stall_start']
-    #             duration = row['stall_duration']
-    #             end_time = start_time + timedelta(seconds=duration)
-                
-    #             plot_records.append({
-    #                 "category": "Transfer",
-    #                 "sub_category": "Data_Stall",
-    #                 "start_sec": (start_time - global_start).total_seconds(),
-    #                 "end_sec": (end_time - global_start).total_seconds(),
-    #                 "step": row['step']
-    #             })
-    #         else:
-    #             # 使用Compute事件的时间作为参考
-    #             compute_row = compute_df[compute_df['step'] == row['step']]
-    #             if not compute_row.empty and isinstance(compute_row.iloc[0]['timestamp'], datetime):
-    #                 start_time = compute_row.iloc[0]['timestamp'] + timedelta(seconds=compute_row.iloc[0]['duration']/2)
-    #                 duration = row['stall_duration']
-    #                 end_time = start_time + timedelta(seconds=duration)
-                    
-    #                 plot_records.append({
-    #                     "category": "Transfer",
-    #                     "sub_category": "Data_Stall",
-    #                     "start_sec": (start_time - global_start).total_seconds(),
-    #                     "end_sec": (end_time - global_start).total_seconds(),
-    #                     "step": row['step']
-    #                 })
-        
-    #     # 处理梯度停滞时间
-    #     if 'grad_stall_duration' in row and isinstance(row['grad_stall_duration'], (float, int)) and row['grad_stall_duration'] > 0:
-    #         if 'grad_stall_start' in row and isinstance(row['grad_stall_start'], datetime):
-    #             start_time = row['grad_stall_start']
-    #             duration = row['grad_stall_duration']
-    #             end_time = start_time + timedelta(seconds=duration)
-                
-    #             plot_records.append({
-    #                 "category": "Transfer",
-    #                 "sub_category": "Gradient_Stall",
-    #                 "start_sec": (start_time - global_start).total_seconds(),
-    #                 "end_sec": (end_time - global_start).total_seconds(),
-    #                 "step": row['step']
-    #             })
-    #         else:
-    #             # 使用Compute事件的时间作为参考
-    #             compute_row = compute_df[compute_df['step'] == row['step']]
-    #             if not compute_row.empty and isinstance(compute_row.iloc[0]['timestamp'], datetime):
-    #                 start_time = compute_row.iloc[0]['timestamp'] + timedelta(seconds=compute_row.iloc[0]['duration']*0.8)
-    #                 duration = row['grad_stall_duration']
-    #                 end_time = start_time + timedelta(seconds=duration)
-                    
-    #                 plot_records.append({
-    #                     "category": "Transfer",
-    #                     "sub_category": "Gradient_Stall",
-    #                     "start_sec": (start_time - global_start).total_seconds(),
-    #                     "end_sec": (end_time - global_start).total_seconds(),
-    #                     "step": row['step']
-    #                 })
-    
     # 5. 处理Transfer事件 - 重构后的新逻辑
     transfer_df = df[df['event_type'] == 'Transfer'].copy()
 
@@ -219,11 +156,11 @@ def rearrange_single_save(
         
         if sub_category_name == 'HPT':
             plot_records.append({
-                "category": "Compute",  # <-- 类别改为Compute
+                "category": "Compute",   # <-- 类别改为Compute
                 "sub_category": "HPT_1",   # <-- 子类别保持为HPT，以便在图上识别
                 "start_sec": (start_time - global_start).total_seconds(), # 时间信息完全相同
                 "end_sec": (end_time - global_start).total_seconds(),   # 时间信息完全相同
-                "step": row['step']
+                "step": row['step']+1
             })
     
     
@@ -254,61 +191,57 @@ def rearrange_single_save(
                 "step": row['step']
             })
             
-    # # --- 核心修改：实现Update和HPT重叠部分变为空的逻辑 ---
-    # # 7. 分离事件列表
-    # update_events = [r for r in plot_records if r['sub_category'] == 'Update']
-    # hpt_events = [r for r in plot_records if r['sub_category'] == 'HPT']
-    # # 将其他所有事件（包括原始HPT）先放入最终列表
-    # final_plot_records = [r for r in plot_records if r['sub_category'] != 'Update']
-
-    # # 8. 对每个Update事件，减去所有HPT事件的区间
-    # for u_event in update_events:
-    #     # 一个Update事件最初是一个完整的区间块
-    #     pieces_to_process = [(u_event['start_sec'], u_event['end_sec'])]
+    # --- 核心修改开始：计算HPT_1和Backward的交集 ---
+    
+    # 7. 将plot_records转换为DataFrame进行处理
+    temp_plot_df = pd.DataFrame(plot_records)
+    
+    if not temp_plot_df.empty:
+        # 7.1 分离出HPT_1, Backward, 和其他所有事件
+        hpt1_events = temp_plot_df[temp_plot_df['sub_category'] == 'HPT_1'].copy()
+        backward_events = temp_plot_df[temp_plot_df['sub_category'] == 'Backward'].copy()
+        other_events = temp_plot_df[~temp_plot_df['sub_category'].isin(['HPT_1', 'Backward'])]
         
-    #     # 用每一个HPT事件去“切割”当前的Update块
-    #     for h_event in hpt_events:
-    #         h_start, h_end = h_event['start_sec'], h_event['end_sec']
-    #         next_pieces = []
-            
-    #         for p_start, p_end in pieces_to_process:
-    #             # 如果没有重叠，则保留原样
-    #             if p_end <= h_start or p_start >= h_end:
-    #                 next_pieces.append((p_start, p_end))
-    #                 continue
-                
-    #             # 如果有重叠，计算切剩下的部分
-    #             # 左边部分
-    #             if p_start < h_start:
-    #                 next_pieces.append((p_start, h_start))
-    #             # 右边部分
-    #             if p_end > h_end:
-    #                 next_pieces.append((h_end, p_end))
-            
-    #         # 更新Update块为切割后的结果，为下一个HPT切割做准备
-    #         pieces_to_process = next_pieces
-            
-    #     # 9. 将最终切分剩下的Update小块重新生成绘图记录
-    #     for final_start, final_end in pieces_to_process:
-    #         # 忽略因浮点精度问题产生的极小碎片
-    #         if final_end - final_start > 1e-9:
-    #             new_event = u_event.copy() # 复制元数据
-    #             new_event['start_sec'] = final_start
-    #             new_event['end_sec'] = final_end
-    #             final_plot_records.append(new_event)
+        # 7.2 为了合并，重命名Backward事件的时间列，避免列名冲突
+        backward_events = backward_events[['step', 'start_sec', 'end_sec']].rename(
+            columns={'start_sec': 'b_start', 'end_sec': 'b_end'}
+        )
+        
+        # 7.3 将HPT_1事件与对应step的Backward事件合并
+        # inner merge确保只保留那些在同一个step中同时存在HPT_1和Backward的记录
+        merged_hpt = pd.merge(hpt1_events, backward_events, on='step', how='inner')
+        
+        # 7.4 计算交集
+        merged_hpt['intersection_start'] = np.maximum(merged_hpt['start_sec'], merged_hpt['b_start'])
+        merged_hpt['intersection_end'] = np.minimum(merged_hpt['end_sec'], merged_hpt['b_end'])
+        
+        # 7.5 筛选出有有效重叠的事件（交集时长 > 0）
+        valid_hpt = merged_hpt[merged_hpt['intersection_start'] < merged_hpt['intersection_end']].copy()
+        
+        # 7.6 更新HPT_1事件的起始和结束时间为交集时间
+        valid_hpt['start_sec'] = valid_hpt['intersection_start']
+        valid_hpt['end_sec'] = valid_hpt['intersection_end']
+        
+        # 7.7 准备最终的DataFrame，只保留必要的列
+        final_hpt = valid_hpt[['category', 'sub_category', 'start_sec', 'end_sec', 'step']]
+        
+        # 7.8 将处理后的HPT_1事件、原始的Backward事件以及所有其他事件重新组合
+        # 注意：这里我们把原始的Backward事件也加回来
+        final_plot_df = pd.concat([other_events, temp_plot_df[temp_plot_df['sub_category'] == 'Backward'], final_hpt])
     
-    # 7. 创建最终的DataFrame
-    plot_data = pd.DataFrame(plot_records)
-    # plot_data = pd.DataFrame(final_plot_records) if final_plot_records else pd.DataFrame()
-    
+    else:
+        final_plot_df = pd.DataFrame()
+
+    # --- 核心修改结束 ---
+
     # 8. 添加持续时间列
-    if not plot_data.empty:
-        plot_data["duration"] = plot_data["end_sec"] - plot_data["start_sec"]
+    if not final_plot_df.empty:
+        final_plot_df["duration"] = final_plot_df["end_sec"] - final_plot_df["start_sec"]
     
     # 9. 按起始时间排序
-    if not plot_data.empty:
-        plot_data = plot_data.sort_values("start_sec").reset_index(drop=True)
+    if not final_plot_df.empty:
+        final_plot_df = final_plot_df.sort_values("start_sec").reset_index(drop=True)
     
     # 10. 保存结果
-    if not plot_data.empty:
-        plot_data.to_parquet(output_path)
+    if not final_plot_df.empty:
+        final_plot_df.to_parquet(output_path)

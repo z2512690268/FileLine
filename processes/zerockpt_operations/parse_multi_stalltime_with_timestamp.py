@@ -14,6 +14,8 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
         'log_time': r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})',
         'adamw_callback': r'^AdamW Callback (\d+\.\d+)',  # 直接匹配AdamW Callback
         'persist_callback': r'- persist_callback: ([\d\.]+)s, ([\d\.]+), ([\d\.]+)',
+        'low_priority_task': r'End low priority tasks, duration: (\d+) ms',
+        'high_priority_task': r'End high priority task, duration: (\d+) ms',
         'step': r'Step (\d+) Time: ([\d\.]+)s Forward: ([\d\.]+)s Backward: ([\d\.]+)s Update: ([\d\.]+)s Loss: ([\d\.]+) Singleloss: ([\d\.]+) Tokens/s: ([\d\.]+)',
         'stall': r'- Stall time: ([\d\.]+)s, ([\d\.]+), ([\d\.]+)',
         'grad_stall': r'- grad stall time: ([\d\.]+)s, ([\d\.]+), ([\d\.]+)',
@@ -33,11 +35,18 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
         
         # 提供默认值以防解析失败
         file_meta = {
-            'model_name': file_meta_parts[0] if len(file_meta_parts) > 0 else 'unknown',
-            'ckpt_type': file_meta_parts[1] if len(file_meta_parts) > 1 else 'unknown',
-            'ckpt_freq': file_meta_parts[3] if len(file_meta_parts) > 3 else 'unknown',
+            'model_name': str(file_meta_parts[0]) if len(file_meta_parts) > 0 else 'unknown',
+            'ckpt_type': str(file_meta_parts[1]) if len(file_meta_parts) > 1 else 'unknown',
+            'total_steps': int(file_meta_parts[2]) if len(file_meta_parts) > 2 else 'unknown',  # 注意，转换成int会比较好处理，因为下面step也是int
+            'ckpt_freq': int(file_meta_parts[3]) if len(file_meta_parts) > 3 else 'unknown',
+            'crash_freq': int(file_meta_parts[7]) if len(file_meta_parts) > 7 else 'unknown',
             'file_name': basename
         }
+        
+        if file_meta['crash_freq'] != 'unknown':
+            print(f"This is a crash expriment log, crash_freq: {file_meta['crash_freq']}")
+        
+        # print(file_meta['total_steps'])
         
         # 当前文件的状态变量
         current_step = None
@@ -58,6 +67,8 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
                         'ckpt_type': file_meta['ckpt_type'],
                         'ckpt_freq': file_meta['ckpt_freq'],
                         'file_name': file_meta['file_name'],
+                        'total_steps': file_meta['total_steps'],
+                        'crash_freq': file_meta['crash_freq'],
                         'record_type': None,
                         'timestamp': None,
                         'step': current_step
@@ -190,6 +201,24 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
                         }
                         all_data.append(persist_record)
                         continue
+                    
+                    persist_match = re.search(patterns['low_priority_task'], line_remaining)
+                    if persist_match:
+                        persist_record = {
+                            **data_point,
+                            'record_type': 'LPT',
+                            'total_time': int(persist_match.group(1)) / 1000.0  # 转换为秒
+                        }
+                        all_data.append(persist_record)
+                    
+                    persist_match = re.search(patterns['high_priority_task'], line_remaining)
+                    if persist_match:
+                        persist_record = {
+                            **data_point,
+                            'record_type': 'HPT',
+                            'total_time': int(persist_match.group(1)) / 1000.0  # 转换为秒
+                        }
+                        all_data.append(persist_record)
                         
                 except Exception as e:
                     print(f"Error parsing line: {line}\nError: {str(e)}")

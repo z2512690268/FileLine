@@ -48,6 +48,14 @@ def plot_timeline_hbar(
     ylabel_fontfamily: Optional[str] = None,
     tick_fontsize: int = 10,
     tick_fontfamily: Optional[str] = None,
+    # 透明度
+    axhline_aplha: float = 0.1,
+    barh_alpha: float = 1.00,
+    # 不需要的图例
+    exclude_from_legend: Optional[List[str]] = None,
+    # 其他杂项
+    edge_color: str = "black",  # 事件块边框颜色
+    legend_rename_map: Optional[Dict[str, str]] = None, # 重命名表
     **kwargs  # 捕获其他未使用的参数
 ) -> List[str]:
     """通用时间线绘图函数 - 每个子类别分配唯一颜色
@@ -141,7 +149,7 @@ def plot_timeline_hbar(
     
     # 为每个类别添加水平线
     for cat, ypos in category_positions.items():
-        ax.axhline(y=ypos, color='gray', linestyle='-', alpha=0.3)
+        ax.axhline(y=ypos, color='gray', linestyle='-', alpha=axhline_aplha)
     
     # 绘制每个事件
     for _, row in df.iterrows():
@@ -171,8 +179,8 @@ def plot_timeline_hbar(
             left=start_pos, 
             height=height, 
             color=color, 
-            alpha=0.85,
-            edgecolor="black"
+            alpha=barh_alpha,
+            edgecolor=edge_color
         )
         
         # 确定标签文本
@@ -229,11 +237,19 @@ def plot_timeline_hbar(
         ax.xaxis.label.set_fontfamily(xlabel_fontfamily)
     
     # 添加图例
-    if len(sub_category_colors) < 20:  # 避免图例太多
+    if len(sub_category_colors) < 20:  # 避免图例太多    
         legend_handles = []
+        # 如果 exclude_from_legend 未设置，则视为空列表
+        exclude_list = exclude_from_legend or []
+        rename_map = legend_rename_map or {} # 如果未提供，视为空字典
         for sub_cat, color in sub_category_colors.items():
-            legend_handles.append(plt.Rectangle((0,0),1,1, fc=color, label=sub_cat))
-        
+            # 如果子类别在排除列表中，则跳过，不为它创建图例
+            if sub_cat in exclude_list:
+                print(f"Skipping legend for excluded sub-category: {sub_cat}")
+                continue
+            display_label = rename_map.get(sub_cat, sub_cat)
+            legend_handles.append(plt.Rectangle((0,0),1,1, fc=color, label=display_label))
+
         ax.legend(
             handles=legend_handles, 
             title="Sub Categories",

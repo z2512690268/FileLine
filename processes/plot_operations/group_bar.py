@@ -52,6 +52,9 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                      yticks_fontfamily: Optional[str] = None,
                      subplot_title_fontsize: int = 10,
                      subplot_title_fontfamily: Optional[str] = None,
+                     subplot_title_y: float = 1.01,          # 新增: 控制子图标题的Y位置
+                     figure_top_margin: Optional[float] = None, # 新增: 控制整个图表的顶部边距
+                     normalization: Optional[Dict] = None,
                      # 图例参数
                      legend_loc: Union[str, tuple] = "best",
                      legend_bbox_to_anchor: Optional[tuple] = None,
@@ -64,7 +67,7 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                      legend_facecolor: Optional[str] = None,
                      legend_edgecolor: Optional[str] = None,
                      # 数据聚合参数
-                     aggregate_func: str = 'mean'):
+                     aggregate_func: str = 'mean'):  # 取平均值
     """绘制分组柱状图（支持四维变量：主分组、子分组、行分组和列分组）"""
 
     # 读取数据
@@ -132,6 +135,34 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
             col_groups = sorted(df[col_col].unique())
     else:
         col_groups = [None]
+        
+    
+    # --- 【新增】步骤1：预先进行数据聚合 ---
+    group_by_cols = [col for col in [row_col, col_col, main_group_col, sub_group_col] if col]
+    aggregated_df = df.groupby(group_by_cols, as_index=False)[value_col].agg(aggregate_func)
+
+    # --- 【新增】步骤2：执行归一化 ---
+    norm_params = normalization or {}
+    if norm_params.get("enabled", False):
+        ref_conditions = norm_params.get("reference_conditions")
+        if not ref_conditions:
+            raise ValueError("启用归一化时，必须提供 'reference_conditions'。")
+
+        mask = pd.Series(True, index=aggregated_df.index)
+        for col, val in ref_conditions.items():
+            mask &= (aggregated_df[col] == val)
+        
+        ref_rows = aggregated_df[mask]
+        if len(ref_rows) != 1:
+            raise ValueError(f"根据归一化条件 {ref_conditions} 找到 {len(ref_rows)} 行，必须恰好为1行。")
+            
+        reference_value = ref_rows.iloc[0][value_col]
+        
+        if reference_value == 0:
+            raise ValueError("归一化的基准值为0，无法进行除法。")
+
+        aggregated_df[value_col] = aggregated_df[value_col] / reference_value
+        print(f"数据已根据基准值 {reference_value} 进行归一化。")
     
     # 创建分组颜色映射
     if colors is None:
@@ -201,13 +232,17 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                 for j, sg in enumerate(sub_groups):
                     color = colors[j]
                     for i, mg in enumerate(main_groups):
-                        # 检查数据是否存在
-                        mask = (sub_df[main_group_col] == mg) & (sub_df[sub_group_col] == sg)
+                        # --- 【修改】步骤3：从预聚合数据中查找值，而不是动态计算 ---
+                        mask = (aggregated_df[main_group_col] == mg) & (aggregated_df[sub_group_col] == sg)
+                        if row_col and row_val is not None:
+                            mask &= (aggregated_df[row_col] == row_val)
+                        if col_col and col_val is not None:
+                            mask &= (aggregated_df[col_col] == col_val)
+
                         if not mask.any():
-                            # 没有数据，跳过但不改变位置
                             continue
-                            
-                        y = sub_df[mask][value_col].agg(aggregate_func)
+                        
+                        y = aggregated_df[mask][value_col].iloc[0] # 直接取值
                         x = x_main_global[i] + offsets_global[j]
                         ax.bar(x, y, bar_width, color=color)
                 
@@ -257,8 +292,9 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                 if col_col and col_val is not None:
                     title_parts.append(f"{col_col}: {col_labels.get(col_val, col_val) if col_labels else col_val}")
                 if title_parts:
-                    ax.set_title(" | ".join(title_parts), fontsize=subplot_title_fontsize, 
-                                 fontfamily=subplot_title_fontfamily)
+                    # 使用新的 subplot_title_y 参数
+                    ax.set_title(" | ".join(title_parts), fontsize=subplot_title_fontsize,
+                                 fontfamily=subplot_title_fontfamily, y=subplot_title_y)
                 
                 # 设置标签字体
                 ax.tick_params(axis='x', labelsize=xticks_fontsize)
@@ -272,6 +308,22 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                 
                 # 只在边缘设置标签
                 if r == nrows - 1:
+                    # # ax.set_xlabel(xlabel, fontsize=xlabel_fontsize, fontfamily=xlabel_fontfamily)
+                    # # 1. 获取子图的标题，例如 "(a) Llama1B"
+                    # subplot_title = ""
+                    # if col_col and col_val is not None:
+                    #     col_display = col_labels.get(col_val, col_val) if col_labels else col_val
+                    #     subplot_title = f"({chr(ord('a') + c)}) {col_display}"
+                    
+                    # # 2. 从 YAML 获取 X 轴的通用描述，例如 "Checkpoint Type"
+                    # xaxis_description = xlabel 
+
+                    # # 3. 用换行符将两者合并
+                    # # final_label = f"{xaxis_description}\n{subplot_title}"
+                    # final_label = f"{xaxis_description}"
+                    
+                    # # 4. 设置为 X 轴的标签
+                    # ax.set_xlabel(final_label, fontsize=xlabel_fontsize, fontfamily=xlabel_fontfamily)
                     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize, fontfamily=xlabel_fontfamily)
                 if c == 0:
                     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize, fontfamily=ylabel_fontfamily)
@@ -302,7 +354,12 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
         
         # 调整布局
         plt.tight_layout()
-        fig.subplots_adjust(top=0.92 if nrows * ncols > 1 else 0.88)  # 为标题留出空间
+        if figure_top_margin:
+             fig.subplots_adjust(top=figure_top_margin)
+        else:
+            # 保留默认行为
+            #  fig.subplots_adjust(top=0.92 if legend_loc != "upper center" else 0.88)
+            fig.subplots_adjust(top=0.92 if nrows * ncols > 1 else 0.88)  # 为标题留出空间
         
     else:
         # 非子图模式 - 原逻辑
@@ -312,10 +369,11 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
         for j, sg in enumerate(sub_groups):
             color = colors[j]
             for i, mg in enumerate(main_groups):
-                mask = (df[main_group_col] == mg) & (df[sub_group_col] == sg)
+                # --- 【修改】步骤3：从预聚合数据中查找值 ---
+                mask = (aggregated_df[main_group_col] == mg) & (aggregated_df[sub_group_col] == sg)
                 if not mask.any():
                     continue
-                y = df[mask][value_col].agg(aggregate_func)
+                y = aggregated_df[mask][value_col].iloc[0] # 直接取值
                 x = x_main_global[i] + offsets_global[j]
                 ax.bar(x, y, bar_width, color=color)
         
