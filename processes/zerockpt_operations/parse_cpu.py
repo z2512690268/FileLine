@@ -32,9 +32,11 @@ def parse_cpu(input_paths: List[InputPath], output_path: Path, time_from_start: 
             'ckpt_type': file_meta_parts[1] if len(file_meta_parts) > 1 else 'unknown',
             'step_num': file_meta_parts[2] if len(file_meta_parts) > 2 else 'unknown', # add filemeta infomation
             'ckpt_freq': file_meta_parts[3] if len(file_meta_parts) > 3 else 'unknown',
-            'file_name': basename        
+            'file_name': basename,
+            'absolute_path': str(input_path.original_path),
         }
         # print(file_meta['step_num']) #debug
+        # print(f"file absolute path: {file_meta['absolute_path']}")
         
         # TODO 暂时在这里添加筛选逻辑，但是处于后面VRAM,RAM等同需过滤，filter独立比较好，可以用tag传递信息
         # 如果解耦，两个想法：1.先过滤后parse， 2. parse后再过滤

@@ -13,8 +13,9 @@ class ProcessorRegistry:
     _processors: Dict[str, Dict] = {}
 
     @classmethod
-    def dependencies(deps):
+    def dependencies(cls, deps):
         """注解，用于声明函数或类的依赖项"""
+        #TODO 功能测试失败
         def decorator(obj):
             if not hasattr(obj, '__dependencies__'):
                 obj.__dependencies__ = []

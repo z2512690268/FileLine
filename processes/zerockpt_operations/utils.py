@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-
+from pathlib import Path
 
 def get_step_timestamps(file_meta) -> tuple:
     '''
@@ -11,8 +11,11 @@ def get_step_timestamps(file_meta) -> tuple:
     '''
     try:
         log_file_name = file_meta['file_name'] + '.log'
+        absolute_path = Path(file_meta['absolute_path'])
         # print(f"Reading log file: {log_file_name}") #debug
-        with open(log_file_name, 'r') as l:
+        log_file_path = absolute_path.with_suffix('')
+        # print(f"Log file path: {log_file_path}")
+        with open(log_file_path, 'r') as l:
             # 遍历日志文件，查找 Step 记录对应的时间戳
             for line in l:
                 line = line.strip()

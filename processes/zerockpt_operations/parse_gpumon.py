@@ -33,9 +33,9 @@ def parse_gpu(input_paths: List[InputPath], output_path: Path, time_from_start: 
             'ckpt_type': file_meta_parts[1] if len(file_meta_parts) > 1 else 'unknown',
             'step_num': file_meta_parts[2] if len(file_meta_parts) > 2 else 'unknown',
             'ckpt_freq': file_meta_parts[3] if len(file_meta_parts) > 3 else 'unknown',
-            'file_name': basename        
+            'file_name': basename,
+            'absolute_path': str(input_path.original_path)
         }
-        
         # 获取时间戳范围
         step_1_timestamp, step_num_timestamp = get_step_timestamps(file_meta)
         

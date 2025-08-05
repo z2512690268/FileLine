@@ -162,6 +162,7 @@ def rearrange_single_save_halfzero(
                 "end_sec": (end_time - global_start).total_seconds(),   # 时间信息完全相同
                 "step": row['step']+1
             })
+            print(f"Added HPT_1 event for step {row['step']+1} with start_sec {start_time - global_start} and end_sec {end_time - global_start}")
     
     
     # 6. 处理Background事件
@@ -240,7 +241,7 @@ def rearrange_single_save_halfzero(
     
     # 9. 按起始时间排序
     if not final_plot_df.empty:
-        final_plot_df = final_plot_df.sort_values("start_sec").reset_index(drop=True)
+        final_plot_df = final_plot_df.sort_values("start_sec", kind = 'mergesort').reset_index(drop=True)
     
     # 10. 保存结果
     if not final_plot_df.empty:

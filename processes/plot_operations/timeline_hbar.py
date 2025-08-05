@@ -51,6 +51,19 @@ def plot_timeline_hbar(
     # 透明度
     axhline_aplha: float = 0.1,
     barh_alpha: float = 1.00,
+    # 图例
+    legend_loc: Union[str, tuple] = "best",
+    legend_bbox_to_anchor: Optional[tuple] = None,
+    legend_ncol: Optional[int] = None,
+    legend_title: Optional[str] = None,
+    legend_fontsize: Optional[int] = None,
+    legend_fontfamily: Optional[str] = None,
+    legend_shadow: bool = False,
+    legend_frameon: bool = True,
+    legend_facecolor: Optional[str] = None,
+    legend_edgecolor: Optional[str] = None,
+    legend_sigle_edgecolor: Optional[str] = None,
+    legend_sigle_linewidth: float = 0.6,
     # 不需要的图例
     exclude_from_legend: Optional[List[str]] = None,
     # 其他杂项
@@ -229,7 +242,8 @@ def plot_timeline_hbar(
     if min_time > 1000:  # 毫秒级时间戳
         ax.set_xlabel(f"{xlabel} (seconds from start)")
     else:
-        ax.set_xlabel(f"{xlabel} (units from start)")
+        # ax.set_xlabel(f"{xlabel} (units from start)")
+        ax.set_xlabel(f"{xlabel} (seconds from start)")
     
     if xlabel_fontsize:
         ax.xaxis.label.set_fontsize(xlabel_fontsize)
@@ -248,15 +262,42 @@ def plot_timeline_hbar(
                 print(f"Skipping legend for excluded sub-category: {sub_cat}")
                 continue
             display_label = rename_map.get(sub_cat, sub_cat)
-            legend_handles.append(plt.Rectangle((0,0),1,1, fc=color, label=display_label))
+            legend_handles.append(
+                plt.Rectangle((0,0),1,1, 
+                              fc = color, 
+                              ec = edge_color if legend_sigle_edgecolor is None else legend_sigle_edgecolor,
+                              linewidth = legend_sigle_linewidth,
+                              label=display_label)
+                )
+            
+        # 添加共享图例
+        legend_params = {
+            'handles': legend_handles,
+            'loc': legend_loc,
+            'bbox_to_anchor': legend_bbox_to_anchor,
+            'ncol': legend_ncol,
+            'title': legend_title,
+            'shadow': legend_shadow,
+            'frameon': legend_frameon,
+            'facecolor': legend_facecolor,
+            'edgecolor': legend_edgecolor
+        }
+        if legend_fontsize or legend_fontfamily:
+            legend_params['prop'] = {
+                'size': legend_fontsize,
+                'family': legend_fontfamily
+            }
+        
+        # 添加图例
+        ax.legend(**{k: v for k, v in legend_params.items() if v is not None})
 
-        ax.legend(
-            handles=legend_handles, 
-            title="Sub Categories",
-            bbox_to_anchor=(1.05, 1),
-            loc='upper left',
-            fontsize=max(8, tick_fontsize-2)
-        )
+        # ax.legend(
+        #     handles=legend_handles, 
+        #     title="Sub Categories",
+        #     bbox_to_anchor=(1.05, 1),
+        #     loc='upper left',
+        #     fontsize=max(8, tick_fontsize-2)
+        # )
     
     # 添加网格
     if grid:

@@ -3,6 +3,7 @@ from typing import Optional, Union, Dict, List, Tuple
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator  # 用于设置y轴刻度
 from matplotlib.gridspec import GridSpec
 from core.processing import ProcessorRegistry, InputPath
 
@@ -67,7 +68,15 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                      legend_facecolor: Optional[str] = None,
                      legend_edgecolor: Optional[str] = None,
                      # 数据聚合参数
-                     aggregate_func: str = 'mean'):  # 取平均值
+                     aggregate_func: str = 'mean',
+                     # 在柱子上方显示数据
+                     show_bar_values: bool = False,
+                     bar_value_format: str = '{:.1f}',  # 例如 '{:.1f}' 表示保留一位小数，'{:.0f}' 表示整数。
+                     bar_value_fontsize: int = 8,
+                     bar_value_rotation: float = 90, # 控制数字的旋转角度，90 表示垂直显示。
+                     bar_value_fontfamily: Optional[str] = None,
+                     bar_value_offset: Optional[float] = None  # 数字距离柱顶的额外偏移量，用于微调位置。
+                     ):  
     """绘制分组柱状图（支持四维变量：主分组、子分组、行分组和列分组）"""
 
     # 读取数据
@@ -245,6 +254,24 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                         y = aggregated_df[mask][value_col].iloc[0] # 直接取值
                         x = x_main_global[i] + offsets_global[j]
                         ax.bar(x, y, bar_width, color=color)
+
+                        # feat：如果需要在柱子上方显示数据
+                        if show_bar_values and y is not None and y != 0:
+                            # 准备要显示的文本
+                            label_text = bar_value_format.format(y)
+                            
+                            # 计算一个小的垂直偏移量，让文本在柱子上方一点点
+                            # 如果用户未指定固定偏移，则自动计算一个（Y轴最大值的1%）
+                            offset = bar_value_offset if bar_value_offset is not None else ax.get_ylim()[1] * 0.01
+                            y_pos = y + offset
+                            
+                            # 在(x, y_pos)坐标处添加文本
+                            ax.text(x, y_pos, label_text,
+                                    ha='center',              # 水平居中对齐
+                                    va='bottom',              # 垂直底部对齐
+                                    fontsize=bar_value_fontsize,
+                                    rotation=bar_value_rotation,
+                                    fontfamily=xticks_fontfamily) # 复用x轴标签字体
                 
                 # 在所有子图中使用相同的x轴刻度和标签
                 ax.set_xticks(x_main_global)
@@ -258,6 +285,8 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                     
                 if ylim:
                     ax.set_ylim(ylim)
+                if yticks_num:
+                    ax.yaxis.set_major_locator(MaxNLocator(nbins=yticks_num))
                 else:
                     # 自动调整y轴范围包含0点
                     ymin, ymax = ax.get_ylim()
@@ -376,6 +405,24 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                 y = aggregated_df[mask][value_col].iloc[0] # 直接取值
                 x = x_main_global[i] + offsets_global[j]
                 ax.bar(x, y, bar_width, color=color)
+
+                # feat：如果需要在柱子上方显示数据
+                if show_bar_values and y is not None and y != 0:
+                            # 准备要显示的文本
+                            label_text = bar_value_format.format(y)
+                            
+                            # 计算一个小的垂直偏移量，让文本在柱子上方一点点
+                            # 如果用户未指定固定偏移，则自动计算一个（Y轴最大值的1%）
+                            offset = bar_value_offset if bar_value_offset is not None else ax.get_ylim()[1] * 0.01
+                            y_pos = y + offset
+                            
+                            # 在(x, y_pos)坐标处添加文本
+                            ax.text(x, y_pos, label_text,
+                                    ha='center',              # 水平居中对齐
+                                    va='bottom',              # 垂直底部对齐
+                                    fontsize=bar_value_fontsize,
+                                    rotation=bar_value_rotation,
+                                    fontfamily=xticks_fontfamily) # 复用x轴标签字体
         
         # 使用全局标签
         ax.set_xticks(x_main_global)
@@ -389,6 +436,8 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
             
         if ylim: 
             ax.set_ylim(ylim)
+        if yticks_num:
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=yticks_num))
         else:
             ymin, ymax = ax.get_ylim()
             if ymin > 0:
