@@ -29,7 +29,7 @@ def plot_dual_axis_line(input_path: InputPath, output_path: Path,
                         ylabel_y2: str = "Secondary Y-axis",
                         ylim_y2: Optional[tuple] = None,
                         yticks_num_y2: Optional[int] = None,
-                        colors_y2: Optional[List[str]] = ["#FF0000"],
+                        colors_y2: Optional[List[str]] = ["#BD0000"],
                         line_styles_y2: Union[str, List[str]] = "-",
 
                         # --- X轴定制 ---
@@ -51,13 +51,18 @@ def plot_dual_axis_line(input_path: InputPath, output_path: Path,
 
                         # --- 图例参数 ---
                         legend_loc: Union[str, tuple] = "best",
+                        legend_bbox_to_anchor: Optional[tuple] = None,
+                        legend_ncol: Optional[int] = None,
                         legend_title: Optional[str] = None,
                         legend_fontsize: Optional[int] = None,
                         legend_fontfamily: Optional[str] = None,
                         legend_shadow: bool = False,
                         legend_frameon: bool = True,
                         legend_facecolor: Optional[str] = None,
-                        legend_edgecolor: Optional[str] = None):
+                        legend_edgecolor: Optional[str] = None,
+                        legend_label_1: Optional[str] = None, # y1 legend label
+                        legend_label_2: Optional[str] = None, # y2 legend label
+                        ):
     """
     绘制双Y轴折线图。
     左右两个Y轴可以分别绘制来自不同数据列的一条或多条曲线。
@@ -153,13 +158,19 @@ def plot_dual_axis_line(input_path: InputPath, output_path: Path,
 
     # --- 7. 创建统一图例 ---
     handles1, labels1 = ax1.get_legend_handles_labels()
+    if legend_label_1:
+        labels1 = [legend_label_1]
     handles2, labels2 = ax2.get_legend_handles_labels()
+    if legend_label_2:
+        labels2 = [legend_label_2]
     all_handles = handles1 + handles2
     all_labels = labels1 + labels2
     
     legend_params = {
         'handles': all_handles,
         'labels': all_labels,
+        'bbox_to_anchor': legend_bbox_to_anchor,
+        'ncol': legend_ncol,
         'loc': legend_loc,
         'title': legend_title,
         'shadow': legend_shadow,

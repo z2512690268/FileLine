@@ -19,13 +19,14 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                      main_group_gap: float = 0.2,
                      sub_group_gap: float = 0.05,
                      colors: Union[List, Dict] = None,
+                     hatches: Union[List, Dict] = None,
                      title: str = "Grouped Bar Chart",
                      xlabel: str = "Main Groups",
                      ylabel: str = "Value",
                      grid: bool = True,
                      dpi: int = 300,
                      xlim: tuple = None,
-                     ylim: tuple = None,
+                     ylim: Union[tuple, Dict] = None,  # 修改为可为每个子图单独设置y轴范围
                      xticks_num: int = None,
                      yticks_num: int = None,
                      xticks_rotation: float = 0,
@@ -45,6 +46,7 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                      title_fontfamily: Optional[str] = None,
                      xlabel_fontsize: int = 12,
                      xlabel_fontfamily: Optional[str] = None,
+                     xlabel_pad: Optional[float] = None,
                      ylabel_fontsize: int = 12,
                      ylabel_fontfamily: Optional[str] = None,
                      xticks_fontsize: Optional[int] = None,
@@ -54,6 +56,8 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                      subplot_title_fontsize: int = 10,
                      subplot_title_fontfamily: Optional[str] = None,
                      subplot_title_y: float = 1.01,          # 新增: 控制子图标题的Y位置
+                     show_subplot_titles: bool = True,  # 新增: 是否显示子图标题
+                     subplot_titles: Optional[Dict] = None,
                      figure_top_margin: Optional[float] = None, # 新增: 控制整个图表的顶部边距
                      normalization: Optional[Dict] = None,
                      # 图例参数
@@ -74,7 +78,7 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                      bar_value_format: str = '{:.1f}',  # 例如 '{:.1f}' 表示保留一位小数，'{:.0f}' 表示整数。
                      bar_value_fontsize: int = 8,
                      bar_value_rotation: float = 90, # 控制数字的旋转角度，90 表示垂直显示。
-                     bar_value_fontfamily: Optional[str] = None,
+                     bar_value_fontfamily: Optional[str] = None, # 设置成和刻度轴字体一致
                      bar_value_offset: Optional[float] = None  # 数字距离柱顶的额外偏移量，用于微调位置。
                      ):  
     """绘制分组柱状图（支持四维变量：主分组、子分组、行分组和列分组）"""
@@ -180,7 +184,15 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
     elif isinstance(colors, dict):
         colors = [colors.get(sg, 'gray') for sg in sub_groups]
     elif isinstance(colors, list):
-        colors = colors * ((len(sub_groups) // len(colors)) + 1)[:len(sub_groups)]
+        colors = (colors * ((len(sub_groups) // len(colors)) + 1))[:len(sub_groups)]
+
+    hatches_list = [None] * len(sub_groups) # 默认所有柱子都没有花纹
+    if isinstance(hatches, dict):
+        hatches_list = [hatches.get(sg) for sg in sub_groups] # 从字典查找，找不到则为None
+    elif isinstance(hatches, list):
+        # 如果列表比分组少，则循环使用
+        temp_hatches = hatches * ((len(sub_groups) // len(hatches)) + 1)
+        hatches_list = temp_hatches[:len(sub_groups)]
     
     # 全局计算布局参数 - 确保所有子图使用相同的x轴位置
     m = len(sub_groups)
@@ -198,12 +210,24 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
     else:
         xtick_labels = main_groups
 
-    # 创建图例句柄
-    handles = [
-        plt.Rectangle((0, 0), 1, 1, color=colors[j], 
-                      label=sub_group_labels.get(sg, sg) if sub_group_labels else sg)
-        for j, sg in enumerate(sub_groups)
-    ]
+    # 创建图例句柄 支持花纹和颜色
+    handles = []
+    for j, sg in enumerate(sub_groups):
+        label_text = sub_group_labels.get(sg, sg) if sub_group_labels else sg
+        
+        # 构建图例方块的样式参数
+        legend_swatch_kwargs = {
+            'facecolor': colors[j]
+        }
+        current_hatch = hatches_list[j]
+        if current_hatch:
+            print("当前花纹：", current_hatch)
+            legend_swatch_kwargs['hatch'] = current_hatch
+            legend_swatch_kwargs['edgecolor'] = 'black' # 为有花纹的图例增加边框以提高清晰度
+            
+        handles.append(
+            plt.Rectangle((0, 0), 1, 1, label=label_text, **legend_swatch_kwargs)
+        )
 
     # 判断是否是子图模式
     has_subplots = (row_col is not None) or (col_col is not None)
@@ -239,7 +263,6 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                 
                 # 确保所有子图有相同的x轴位置，即使某些分组数据缺失
                 for j, sg in enumerate(sub_groups):
-                    color = colors[j]
                     for i, mg in enumerate(main_groups):
                         # --- 【修改】步骤3：从预聚合数据中查找值，而不是动态计算 ---
                         mask = (aggregated_df[main_group_col] == mg) & (aggregated_df[sub_group_col] == sg)
@@ -253,7 +276,14 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                         
                         y = aggregated_df[mask][value_col].iloc[0] # 直接取值
                         x = x_main_global[i] + offsets_global[j]
-                        ax.bar(x, y, bar_width, color=color)
+                        bar_kwargs = {
+                            'color': colors[j] 
+                        }
+                        current_hatch = hatches_list[j]
+                        if current_hatch:
+                            bar_kwargs['hatch'] = current_hatch
+                            bar_kwargs['edgecolor'] = 'black'  # 为有花纹的柱子增加边框以提高清晰度
+                        ax.bar(x, y, bar_width, **bar_kwargs)
 
                         # feat：如果需要在柱子上方显示数据
                         if show_bar_values and y is not None and y != 0:
@@ -283,8 +313,35 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                 else:
                     ax.set_xlim(x_min_global, x_max_global)
                     
-                if ylim:
-                    ax.set_ylim(ylim)
+                # --- 修改2：重构Y轴范围设置逻辑 ---
+                subplot_ylim_to_set = None
+                if isinstance(ylim, dict):
+                    # 字典模式：为特定子图查找Y轴范围
+                    key = None
+                    if row_col and col_col:
+                        key = (row_val, col_val)
+                    elif row_col:
+                        key = row_val
+                    elif col_col:
+                        key = col_val
+                    
+                    subplot_ylim_to_set = ylim.get(key) # 使用.get()安全地获取值
+                
+                elif isinstance(ylim, (tuple, list)):
+                    # 元组/列表模式：为所有子图设置统一范围 (保持向后兼容)
+                    subplot_ylim_to_set = ylim
+
+                # 步骤2.1：如果找到了要设置的ylim，则应用它
+                if subplot_ylim_to_set:
+                    ax.set_ylim(subplot_ylim_to_set)
+                else:
+                    # 步骤2.2：否则，执行自动范围调整逻辑
+                    current_ymin, current_ymax = ax.get_ylim()
+                    if current_ymin > 0:
+                        ax.set_ylim(0, current_ymax * 1.05)
+                    elif current_ymax < 0:
+                        ax.set_ylim(current_ymin * 1.05, 0)
+
                 if yticks_num:
                     ax.yaxis.set_major_locator(MaxNLocator(nbins=yticks_num))
                 else:
@@ -314,16 +371,41 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                 if grid:
                     ax.grid(True, linestyle='--', alpha=0.6)
                 
-                # 添加子图标题
-                title_parts = []
-                if row_col and row_val is not None:
-                    title_parts.append(f"{row_col}: {row_labels.get(row_val, row_val) if row_labels else row_val}")
-                if col_col and col_val is not None:
-                    title_parts.append(f"{col_col}: {col_labels.get(col_val, col_val) if col_labels else col_val}")
-                if title_parts:
-                    # 使用新的 subplot_title_y 参数
-                    ax.set_title(" | ".join(title_parts), fontsize=subplot_title_fontsize,
-                                 fontfamily=subplot_title_fontfamily, y=subplot_title_y)
+                if show_subplot_titles:
+                    title_to_set = None
+
+                    # 步骤1: 优先从 subplot_titles 字典中查找自定义标题
+                    if isinstance(subplot_titles, dict):
+                        key = None
+                        if row_col and col_col:
+                            key = (row_val, col_val)
+                        elif row_col:
+                            key = row_val
+                        elif col_col:
+                            key = col_val
+                        
+                        if key is not None:
+                            title_to_set = subplot_titles.get(key)
+                    
+                    # 步骤2: 如果没有找到自定义标题，则回退到自动生成
+                    if title_to_set is None:
+                        title_parts = []
+                        if row_col and row_val is not None:
+                            row_display = row_labels.get(row_val, row_val) if row_labels else row_val
+                            title_parts.append(f"{row_col}: {row_display}")
+                        if col_col and col_val is not None:
+                            col_display = col_labels.get(col_val, col_val) if col_labels else col_val
+                            title_parts.append(f"{col_col}: {col_display}")
+                        
+                        if title_parts:
+                            title_to_set = " | ".join(title_parts)
+
+                    # 步骤3: 如果最终确定了标题，则设置它
+                    if title_to_set is not None:
+                        ax.set_title(title_to_set, 
+                                     fontsize=subplot_title_fontsize,
+                                     fontfamily=subplot_title_fontfamily, 
+                                     y=subplot_title_y)
                 
                 # 设置标签字体
                 ax.tick_params(axis='x', labelsize=xticks_fontsize)
@@ -337,23 +419,8 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                 
                 # 只在边缘设置标签
                 if r == nrows - 1:
-                    # # ax.set_xlabel(xlabel, fontsize=xlabel_fontsize, fontfamily=xlabel_fontfamily)
-                    # # 1. 获取子图的标题，例如 "(a) Llama1B"
-                    # subplot_title = ""
-                    # if col_col and col_val is not None:
-                    #     col_display = col_labels.get(col_val, col_val) if col_labels else col_val
-                    #     subplot_title = f"({chr(ord('a') + c)}) {col_display}"
-                    
-                    # # 2. 从 YAML 获取 X 轴的通用描述，例如 "Checkpoint Type"
-                    # xaxis_description = xlabel 
-
-                    # # 3. 用换行符将两者合并
-                    # # final_label = f"{xaxis_description}\n{subplot_title}"
-                    # final_label = f"{xaxis_description}"
-                    
-                    # # 4. 设置为 X 轴的标签
-                    # ax.set_xlabel(final_label, fontsize=xlabel_fontsize, fontfamily=xlabel_fontfamily)
-                    ax.set_xlabel(xlabel, fontsize=xlabel_fontsize, fontfamily=xlabel_fontfamily)
+                    # 设置x轴标签
+                    ax.set_xlabel(xlabel, fontsize=xlabel_fontsize, fontfamily=xlabel_fontfamily, labelpad=xlabel_pad)
                 if c == 0:
                     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize, fontfamily=ylabel_fontfamily)
         
@@ -369,9 +436,16 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
             'title': legend_title,
             'shadow': legend_shadow,
             'frameon': legend_frameon,
-            'facecolor': legend_facecolor,
-            'edgecolor': legend_edgecolor
         }
+
+        has_any_hatch = any(h for h in hatches_list)
+
+        print("是否有花纹：", has_any_hatch)
+
+        if not has_any_hatch:
+            legend_params['facecolor'] = legend_facecolor
+            legend_params['edgecolor'] = legend_edgecolor
+
         if legend_fontsize or legend_fontfamily:
             legend_params['prop'] = {
                 'size': legend_fontsize,
@@ -396,7 +470,6 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
         
         # 使用全局布局参数
         for j, sg in enumerate(sub_groups):
-            color = colors[j]
             for i, mg in enumerate(main_groups):
                 # --- 【修改】步骤3：从预聚合数据中查找值 ---
                 mask = (aggregated_df[main_group_col] == mg) & (aggregated_df[sub_group_col] == sg)
@@ -404,7 +477,13 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
                     continue
                 y = aggregated_df[mask][value_col].iloc[0] # 直接取值
                 x = x_main_global[i] + offsets_global[j]
-                ax.bar(x, y, bar_width, color=color)
+                bar_kwargs = {
+                    'color': colors[j] 
+                }
+                if hatches_list[j]:
+                    bar_kwargs['hatch'] = hatches_list[j]
+                    bar_kwargs['edgecolor'] = 'black'  # 为有花纹的柱子增加边框以提高清晰度
+                ax.bar(x, y, bar_width, **bar_kwargs)
 
                 # feat：如果需要在柱子上方显示数据
                 if show_bar_values and y is not None and y != 0:
@@ -466,7 +545,7 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
         
         # 设置图表元素
         ax.set_title(title, fontsize=title_fontsize, fontfamily=title_fontfamily)
-        ax.set_xlabel(xlabel, fontsize=xlabel_fontsize, fontfamily=xlabel_fontfamily)
+        ax.set_xlabel(xlabel, fontsize=xlabel_fontsize, fontfamily=xlabel_fontfamily, labelpad=xlabel_pad)
         ax.set_ylabel(ylabel, fontsize=ylabel_fontsize, fontfamily=ylabel_fontfamily)
         
         # 设置刻度字体
@@ -488,9 +567,15 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
             'title': legend_title,
             'shadow': legend_shadow,
             'frameon': legend_frameon,
-            'facecolor': legend_facecolor,
-            'edgecolor': legend_edgecolor
         }
+
+        has_any_hatch = any(h for h in hatches_list)
+        
+        print("是否有花纹：", has_any_hatch)
+        if not has_any_hatch:
+            legend_params['facecolor'] = legend_facecolor
+            legend_params['edgecolor'] = legend_edgecolor
+        
         if legend_fontsize or legend_fontfamily:
             legend_params['prop'] = {
                 'size': legend_fontsize,

@@ -39,6 +39,7 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
             'ckpt_type': str(file_meta_parts[1]) if len(file_meta_parts) > 1 else 'unknown',
             'total_steps': int(file_meta_parts[2]) if len(file_meta_parts) > 2 else 'unknown',  # 注意，转换成int会比较好处理，因为下面step也是int
             'ckpt_freq': int(file_meta_parts[3]) if len(file_meta_parts) > 3 else 'unknown',
+            'batch_size': int(file_meta_parts[4]) if len(file_meta_parts) > 4 else 'unknown',
             'crash_freq': int(file_meta_parts[7]) if len(file_meta_parts) > 7 else 'unknown',
             'file_name': basename
         }
@@ -63,12 +64,7 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
                 try:
                     # 初始化基础数据点
                     data_point = {
-                        'model_name': file_meta['model_name'],
-                        'ckpt_type': file_meta['ckpt_type'],
-                        'ckpt_freq': file_meta['ckpt_freq'],
-                        'file_name': file_meta['file_name'],
-                        'total_steps': file_meta['total_steps'],
-                        'crash_freq': file_meta['crash_freq'],
+                        **file_meta,
                         'record_type': None,
                         'timestamp': None,
                         'step': current_step
