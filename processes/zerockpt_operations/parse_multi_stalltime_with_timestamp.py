@@ -37,14 +37,14 @@ def parse_multi_stalltime_with_timestamp(input_paths: List[InputPath], output_pa
         file_meta = {
             'model_name': str(file_meta_parts[0]) if len(file_meta_parts) > 0 else 'unknown',
             'ckpt_type': str(file_meta_parts[1]) if len(file_meta_parts) > 1 else 'unknown',
-            'total_steps': int(file_meta_parts[2]) if len(file_meta_parts) > 2 else 'unknown',  # 注意，转换成int会比较好处理，因为下面step也是int
-            'ckpt_freq': int(file_meta_parts[3]) if len(file_meta_parts) > 3 else 'unknown',
-            'batch_size': int(file_meta_parts[4]) if len(file_meta_parts) > 4 else 'unknown',
-            'crash_freq': int(file_meta_parts[7]) if len(file_meta_parts) > 7 else 'unknown',
+            'total_steps': int(file_meta_parts[2]) if len(file_meta_parts) > 2 else None,  # 注意，转换成int会比较好处理，因为下面step也是int
+            'ckpt_freq': int(file_meta_parts[3]) if len(file_meta_parts) > 3 else None,
+            'batch_size': int(file_meta_parts[4]) if len(file_meta_parts) > 4 else None,
+            'crash_freq': int(file_meta_parts[7]) if len(file_meta_parts) > 7 else None,
             'file_name': basename
         }
         
-        if file_meta['crash_freq'] != 'unknown':
+        if file_meta['crash_freq'] != None:
             print(f"This is a crash expriment log, crash_freq: {file_meta['crash_freq']}")
         
         # print(file_meta['total_steps'])
