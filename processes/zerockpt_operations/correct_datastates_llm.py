@@ -66,7 +66,8 @@ def adjust_datastates_stall_duration(input_path: InputPath, output_path: Path) -
             delta = time_step1 - time_step2
             original_duration = df.loc[idx, 'stall_duration']
             print(f'original_duration: {original_duration:.3f}, delta: {delta:.3f}, step1: {time_step1:.3f}, step2: {time_step2:.3f}, ckpt_freq: {stall_freq}, step: {stall_step}')
-            df.loc[idx, 'stall_duration'] = original_duration + delta
+            # df.loc[idx, 'stall_duration'] = original_duration + delta
+            df.loc[idx, 'stall_duration'] = delta
             update_counter += 1
         else:
             missing_counter += 1
