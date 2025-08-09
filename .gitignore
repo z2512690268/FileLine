@@ -28,3 +28,5 @@ experiment_deepspeed/
 pipelines/
 dummy
 *.gpumon
+test_data/
+docs/
