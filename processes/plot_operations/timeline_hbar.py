@@ -52,6 +52,7 @@ def plot_timeline_hbar(
     axhline_aplha: float = 0.1,
     barh_alpha: float = 1.00,
     # 图例
+    show_legend: bool = True,  # 是否显示图例
     legend_loc: Union[str, tuple] = "best",
     legend_bbox_to_anchor: Optional[tuple] = None,
     legend_ncol: Optional[int] = None,
@@ -251,7 +252,7 @@ def plot_timeline_hbar(
         ax.xaxis.label.set_fontfamily(xlabel_fontfamily)
     
     # 添加图例
-    if len(sub_category_colors) < 20:  # 避免图例太多    
+    if show_legend and len(sub_category_colors) < 20:  # 避免图例太多    
         legend_handles = []
         # 如果 exclude_from_legend 未设置，则视为空列表
         exclude_list = exclude_from_legend or []

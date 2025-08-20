@@ -22,15 +22,17 @@ def plot_dual_axis_line(input_path: InputPath, output_path: Path,
                         ylabel_y1: str = "Primary Y-axis",
                         ylim_y1: Optional[tuple] = None,
                         yticks_num_y1: Optional[int] = None,
-                        colors_y1: Optional[List[str]] = ["#1f77b4"],
+                        colors_y1: Optional[List[str]] = ["#1f77b4"],  # 线条颜色列表
                         line_styles_y1: Union[str, List[str]] = "-",
+                        ylabel_color_y1: Optional[str] = None,  # 新增：Y轴标签颜色（独立控制）
 
                         # --- 右Y轴(Y2)定制 ---
                         ylabel_y2: str = "Secondary Y-axis",
                         ylim_y2: Optional[tuple] = None,
                         yticks_num_y2: Optional[int] = None,
-                        colors_y2: Optional[List[str]] = ["#BD0000"],
+                        colors_y2: Optional[List[str]] = ["#BD0000"],  # 线条颜色列表
                         line_styles_y2: Union[str, List[str]] = "-",
+                        ylabel_color_y2: Optional[str] = None,  # 新增：Y轴标签颜色（独立控制）
 
                         # --- X轴定制 ---
                         xlim: Optional[tuple] = None,
@@ -106,14 +108,14 @@ def plot_dual_axis_line(input_path: InputPath, output_path: Path,
     # --- 3. 在左Y轴(ax1)上绘图 ---
     for i, col in enumerate(value_cols_y1):
         ax1.plot(df[time_col], df[col],
-                 color=colors_y1[i],
+                 color=colors_y1[i],  # 使用指定的线条颜色
                  linestyle=line_styles_y1[i],
                  label=col)
 
     # --- 4. 在右Y轴(ax2)上绘图 ---
     for i, col in enumerate(value_cols_y2):
         ax2.plot(df[time_col], df[col],
-                 color=colors_y2[i],
+                 color=colors_y2[i],  # 使用指定的线条颜色
                  linestyle=line_styles_y2[i],
                  label=col)
 
@@ -129,24 +131,36 @@ def plot_dual_axis_line(input_path: InputPath, output_path: Path,
         for label in ax1.get_xticklabels():
             label.set_fontfamily(xticks_fontfamily)
 
-    # 左Y轴(Y1)
-    ax1.set_ylabel(ylabel_y1, fontsize=ylabel_fontsize, fontfamily=ylabel_fontfamily, color=colors_y1[0])
+    # 左Y轴(Y1) - 关键修改：标签颜色独立控制
+    y1_label_color = ylabel_color_y1 if ylabel_color_y1 is not None else colors_y1[0]
+    ax1.set_ylabel(
+        ylabel_y1, 
+        fontsize=ylabel_fontsize, 
+        fontfamily=ylabel_fontfamily, 
+        color=y1_label_color  # 使用独立设置的标签颜色（或默认取线条首色）
+    )
     if ylim_y1:
         ax1.set_ylim(ylim_y1)
     if yticks_num_y1:
         ax1.yaxis.set_major_locator(plt.MaxNLocator(yticks_num_y1))
-    ax1.tick_params(axis='y', labelcolor=colors_y1[0], labelsize=yticks_fontsize)
+    ax1.tick_params(axis='y', labelcolor=y1_label_color, labelsize=yticks_fontsize)
     if yticks_fontfamily:
         for label in ax1.get_yticklabels():
             label.set_fontfamily(yticks_fontfamily)
 
-    # 右Y轴(Y2)
-    ax2.set_ylabel(ylabel_y2, fontsize=ylabel_fontsize, fontfamily=ylabel_fontfamily, color=colors_y2[0])
+    # 右Y轴(Y2) - 关键修改：标签颜色独立控制
+    y2_label_color = ylabel_color_y2 if ylabel_color_y2 is not None else colors_y2[0]
+    ax2.set_ylabel(
+        ylabel_y2, 
+        fontsize=ylabel_fontsize, 
+        fontfamily=ylabel_fontfamily, 
+        color=y2_label_color  # 使用独立设置的标签颜色（或默认取线条首色）
+    )
     if ylim_y2:
         ax2.set_ylim(ylim_y2)
     if yticks_num_y2:
         ax2.yaxis.set_major_locator(plt.MaxNLocator(yticks_num_y2))
-    ax2.tick_params(axis='y', labelcolor=colors_y2[0], labelsize=yticks_fontsize)
+    ax2.tick_params(axis='y', labelcolor=y2_label_color, labelsize=yticks_fontsize)
     if yticks_fontfamily:
         for label in ax2.get_yticklabels():
             label.set_fontfamily(yticks_fontfamily)
