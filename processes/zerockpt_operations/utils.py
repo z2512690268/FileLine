@@ -33,6 +33,8 @@ def get_step_timestamps(file_meta) -> tuple:
                     elif step == int(file_meta['step_num']):
                         step_num_timestamp = timestamp
             print(f"Step 0 Timestamp: {step_1_timestamp}, Step {file_meta['step_num']} Timestamp: {step_num_timestamp}")
+            print(111111111111111111)
+            print(2222) #
             return step_1_timestamp, step_num_timestamp
     except Exception as e:
         print(f"Error reading log file {log_file_name}, error: {e}")

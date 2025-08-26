@@ -12,21 +12,9 @@ class ProcessorRegistry:
     """处理函数注册中心（支持任意文件类型）"""
     _processors: Dict[str, Dict] = {}
 
+    #20250826 删除dependencies，合并进register
     @classmethod
-    def dependencies(cls, deps):
-        """注解，用于声明函数或类的依赖项"""
-        #TODO 功能测试失败
-        def decorator(obj):
-            if not hasattr(obj, '__dependencies__'):
-                obj.__dependencies__ = []
-            for dep in deps:
-                if dep not in obj.__dependencies__:
-                    obj.__dependencies__.append(dep)
-            return obj
-        return decorator
-
-    @classmethod
-    def register(cls, name: Optional[str] = None, input_type: str = "single", output_ext: str = ".txt"):
+    def register(cls, name: Optional[str] = None, input_type: str = "single", output_ext: str = ".txt", dependencies: Optional[List] = None):
         """注册处理函数的装饰器
         
         Args:
@@ -46,6 +34,15 @@ class ProcessorRegistry:
             if _name in cls._processors:
                 raise ValueError(f"处理器 {_name} 已注册")
             sig = inspect.signature(func)
+
+            if dependencies:
+                # 直接将依赖项附加到原始函数上
+                if not hasattr(func, '__dependencies__'):
+                    func.__dependencies__ = []
+                for dep in dependencies:
+                    if dep not in func.__dependencies__:
+                        func.__dependencies__.append(dep)
+
             func_hash = cls._calculate_hash(func)
 
             @wraps(func)

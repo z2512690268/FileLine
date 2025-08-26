@@ -7,7 +7,7 @@ from datetime import datetime
 import time
 from .utils import get_step_timestamps
 
-@ProcessorRegistry.register(input_type="multi", output_ext=".parquet")
+@ProcessorRegistry.register(input_type="multi", output_ext=".parquet", dependencies=[get_step_timestamps])
 def parse_cpu(input_paths: List[InputPath], output_path: Path, time_from_start: bool = False) -> pd.DataFrame:
     """解析多个运行日志文件并提取性能数据，支持AdamW Callback日志"""
     # 定义所有的正则表达式模式
