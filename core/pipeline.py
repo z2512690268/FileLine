@@ -33,6 +33,7 @@ class IncludeSpec:
     path: str              # Glob路径模式
     re_pattern: Optional[str] = None  # 针对该模式的正则表达式
     tags: Optional[List[str]] = None  # 该模式独有的标签
+    label: Optional[str] = None  # 输入标记，用于在pipeline中引用
 
 @dataclass
 class InitialLoadConfig:
@@ -128,10 +129,12 @@ class PipelineRunner:
 
     def _load_initial_files(self, config: InitialLoadConfig,
                                 debug: bool = False) -> List[int]:
-        """加载初始文件到系统（支持包含/排除模式）"""
-        # 收集所有包含文件
+        """加载初始文件到系统（支持包含/排除模式和输入标记）"""
+        # 收集所有包含文件，同时记录标记信息
         file_tags: Dict[str, List[str]] = {}
+        file_labels: Dict[str, str] = {}  # 文件路径 -> 标记映射
         all_included: Set[str] = set()
+        
         for spec in config.include_patterns:
             pattern = spec.path
             tags = spec.tags or []
@@ -140,14 +143,17 @@ class PipelineRunner:
             # 正则二次过滤
             if spec.re_pattern:
                 try:
-                    pattern = re.compile(spec.re_pattern)
-                    matches = [m for m in matches if pattern.search(m)]
+                    regex_pattern = re.compile(spec.re_pattern)
+                    matches = [m for m in matches if regex_pattern.search(m)]
                 except re.error as e:
                     raise ValueError(f"无效的正则表达式 '{spec.re_pattern}': {e}")
 
             all_included.update(matches)
             for file in matches:
                 file_tags.setdefault(file, []).extend(tags)
+                # 记录文件的标记
+                if spec.label:
+                    file_labels[file] = spec.label
         
         # 处理排除模式
         if config.exclude_patterns:
@@ -166,6 +172,8 @@ class PipelineRunner:
             )
         
         entries = []
+        label_groups: Dict[str, List[int]] = {}  # 标记 -> ID列表映射
+        
         for file_path in matched_files:
             file_tags[file_path].append(file_path)
             current_mtime = self._get_file_mtime(file_path)
@@ -208,7 +216,7 @@ class PipelineRunner:
                         self.session.add(tag)
                     entry.tags.append(tag)
 
-            # 添加标签
+            # 添加全局标签
             if config.tags:
                 for tag_name in config.tags:
                     tag = self.session.query(Tag).filter_by(name=tag_name).first()
@@ -218,11 +226,26 @@ class PipelineRunner:
                     entry.tags.append(tag)
             
             entries.append(entry)
+            
+            # 按标记分组文件ID
+            if file_path in file_labels:
+                label = file_labels[file_path]
+                if label not in label_groups:
+                    label_groups[label] = []
+                label_groups[label].append(entry.id)
         
         self.session.commit()
+        
+        # 更新上下文，添加标记分组
+        all_ids = [e.id for e in entries]
+        for label, ids in label_groups.items():
+            self.context[label] = ids
+            if debug:
+                print(f"创建输入标记 '{label}': {ids}")
+        
         if debug:
             print("-------------------------------------------")
-        return [e.id for e in entries]
+        return all_ids
  
     def _resolve_inputs(self, inputs: Union[str, List[str]]) -> List[int]:
         """解析输入源"""

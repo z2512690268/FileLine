@@ -30,3 +30,5 @@ dummy
 *.gpumon
 test_data/
 docs/
+dev_test_data/
+processes/dev_test/
