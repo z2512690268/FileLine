@@ -12,7 +12,6 @@ class ProcessorRegistry:
     """处理函数注册中心（支持任意文件类型）"""
     _processors: Dict[str, Dict] = {}
 
-    #20250826 删除dependencies，合并进register
     @classmethod
     def register(cls, name: Optional[str] = None, input_type: str = "single", output_ext: str = ".txt", dependencies: Optional[List] = None):
         """注册处理函数的装饰器

@@ -1,6 +1,6 @@
 #!/bin/bash
-source /root/miniconda3/etc/profile.d/conda.sh
-conda activate llama
+# source /root/miniconda3/etc/profile.d/conda.sh
+# conda activate llama
 # 检查传入参数的数量
 if [ "$#" -eq 1 ]; then
   # 如果只有一个参数
