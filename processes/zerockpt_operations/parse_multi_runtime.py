@@ -18,8 +18,16 @@ def parse_multi_runtime(input_paths: List[InputPath], output_path: Path, version
         # 2025-04-29 14:14:54.398 | INFO     | __main__:log_dist:69 - [Rank 0] Step 2: Loss: 9.4980
 
         lines = content.split('\n')
+        
+        # 标记下一次读取到的step是否为重启点
+        next_is_restart = False
+        
         if version == "split":
             for line in lines:
+                # 检测检查点加载
+                if "Load checkpoint time" in line:
+                    next_is_restart = True
+                    
                 # 先判断是否符合要求，再分两类处理
                 if '[Rank 0] Step' in line:
                     # 处理第一类日志
@@ -34,9 +42,16 @@ def parse_multi_runtime(input_paths: List[InputPath], output_path: Path, version
                         forward_str = line.split('Forward: ')[1].split('s')[0]
                         backward_str = line.split('Backward: ')[1].split('s')[0]
                         update_str = line.split('Update: ')[1].split('s')[0]
-                        data.append([input_path.original_path, step_str, time_str, forward_str, backward_str, update_str, loss_str, 0.0])
+                        
+                        data.append([input_path.original_path, step_str, time_str, forward_str, backward_str, update_str, loss_str, 0.0, next_is_restart])
+                        next_is_restart = False # 重置标记
+                        
         elif version == "merge":
             for line in lines:
+                # 检测检查点加载
+                if "Load checkpoint time" in line:
+                    next_is_restart = True
+                    
                 # 先判断是否符合要求，再分两类处理
                 if '[Rank 0] Step' in line:
                     step_str = line.split('[Rank 0] Step ')[1].split(' ')[0]
@@ -46,7 +61,9 @@ def parse_multi_runtime(input_paths: List[InputPath], output_path: Path, version
                     update_str = line.split('Update: ')[1].split('s')[0]
                     loss_str = line.split('Loss: ')[1].split(' ')[0]
                     Token_per_sec_str = line.split('Tokens/s: ')[1].split(' ')[0]
-                    data.append([input_path.original_path, step_str, time_str, forward_str, backward_str, update_str, loss_str, Token_per_sec_str])
+                    data.append([input_path.original_path, step_str, time_str, forward_str, backward_str, update_str, loss_str, Token_per_sec_str, next_is_restart])
+                    next_is_restart = False # 重置标记
+                    
     # 保存到csv文件
-    df = pd.DataFrame(data, columns=['file_path', 'step', 'time', 'forward', 'backward', 'update', 'loss', 'Token_per_sec'])
+    df = pd.DataFrame(data, columns=['file_path', 'step', 'time', 'forward', 'backward', 'update', 'loss', 'Token_per_sec', 'restart_point'])
     df.to_csv(output_path, index=False)

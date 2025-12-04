@@ -30,3 +30,4 @@ dummy
 *.gpumon
 test_data/
 docs/
+run_pipeline.sh
