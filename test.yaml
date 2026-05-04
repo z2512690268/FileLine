@@ -1,0 +1,167 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/const_freq/*.log"
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+  
+  - processor: filter_table
+    inputs: parsed
+    output: filtered1
+    params:
+      conditions:
+        ckpt_freq: in [50, 200]
+        ckpt_type: in ["cpp_overlap", "deepspeed", "grad", "bytecheckpoint", "ideal"]
+
+  - processor: filter_by_condition
+    inputs: filtered1
+    output: filtered2
+    params:
+      # 自定义定义过滤条件
+      filter_expression: "step > total_steps - 8"
+
+  - processor: plot_grouped_bar
+    inputs: filtered2
+    output: throughput
+    params:
+      main_group_col: "ckpt_freq"
+      sub_group_col: "ckpt_type"
+      col_col: "model_name"  # 按模型名称分列
+      value_col: "tokens_per_sec" # throughput
+      title: ""
+      xlabel: "Checkpoint Frequency"
+      yticks_num: 5
+      ylabel: "Throughput (Tokens/s)"
+      grid: False
+      show_main_group_separators: True
+      # ylim: [0, 2850]
+      
+
+      legend_loc: "lower center"
+      legend_bbox_to_anchor: [0.5, 0.92] # 使用 [0.5, Y]
+      legend_ncol: 6 # 保持横向排列
+      legend_frameon: False # 可以去掉图例边框，让它更清爽
+
+      # 顺序
+      # 1. 指定X轴主分组的顺序
+      col_order:
+        - "Llama1B"
+        - "Qwen"
+        - "Opt"
+
+      # 2. 指定每个主分组内部的子分组（柱子）的顺序
+      sub_group_order:
+        - "deepspeed"
+        # - "torch_dcp"
+        # - "torch_snapshot"
+        # - "torch_dcp_async"
+        - "bytecheckpoint"
+        # - "dlrover_flash"
+        # - "datastates_llm"
+        # - "py_async"
+        - "cpp_overlap"
+        - "grad"
+        # - "half_zero"
+        - "ideal"
+      
+      colors:
+        deepspeed:       ${DEEPSPEED_COLOR}
+        torch_dcp:       ${TORCH_DCP_COLOR}
+        bytecheckpoint:  ${BYTECHECKPOINT_COLOR}
+        torch_snapshot:  ${TORCH_SNAPSHOT_COLOR}
+        torch_dcp_async: ${TORCH_DCP_ASYNC_COLOR}
+        dlrover_flash:   ${DLROVER_FLASH_COLOR}
+        datastates_llm:  ${DATASTATES_LLM_COLOR}
+        py_async:        ${PY_ASYNC_COLOR}
+        cpp_overlap:     ${CPP_OVERLAP_COLOR}
+        grad:            ${GRAD_COLOR}
+        half_zero:       ${HALF_ZERO_COLOR}
+        ideal:           ${IDEAL_COLOR}
+    
+      # hatches:
+      #   deepspeed:       "///"
+      #   torch_dcp:       "xx"
+      #   torch_snapshot:  "++"
+      #   torch_dcp_async: "--"
+      #   dlrover_flash:   "oo"
+      #   datastates_llm:  "||"
+      #   py_async:        "xx"
+      #   cpp_overlap:     "//"
+      #   grad:            "++"
+      #   half_zero:       "--"
+      #   ideal:           "//"
+
+      # 字体配置：全局改为Times New Roman
+      title_fontfamily: "Times New Roman"       # 总标题字体
+      xlabel_fontfamily: "Times New Roman"      # x轴标签字体
+      ylabel_fontfamily: "Times New Roman"      # y轴标签字体
+      xticks_fontfamily: "Times New Roman"      # x轴刻度字体
+      yticks_fontfamily: "Times New Roman"      # y轴刻度字体
+      subplot_title_fontfamily: "Times New Roman"  # 子图标题字体
+      legend_fontfamily: "Times New Roman"      # 图例字体
+
+      # 聚合函数
+      aggregate_func: "max"  # 取最大值
+
+      # # --- 新增的归一化配置 ---
+      # normalization:
+      #   enabled: true
+      #   # 定义哪个柱子的高度为 1.0
+      #   reference_conditions:
+      #     ckpt_type: "ideal" # 参照组的主分组
+      #     ckpt_freq: "100"       # 参照组的子分组
+      #     model_name: "Llama1B"  # 参照组所在的列（子图）
+
+      show_bar_values: True
+      bar_value_format: '{:.0f}'   # 显示三位小数
+      bar_value_fontsize: 12       # 字体大小设为12
+      bar_value_rotation: 90       # 垂直显示
+
+      bar_width: 0.5
+      main_group_gap: 0.1
+      sub_group_gap: 0.01
+
+      show_subplot_titles: True  # 显示子图标题
+      
+      subplot_titles:
+        "Llama1B": "(a) LLaMA3.2-1B" # 为'Llama1B'子图设置自定义标题
+        "Qwen": "(b) Qwen3-0.6B"      # 为'Qwen'子图设置自定义标题
+        "Opt": "(c) Opt-350M"
+        # 若'Opt'子图没有在这里指定，所以它会回退到自动标题，例如："Model Category: Opt"
+      figsize: [18, 5]
+      xlabel_pad: 0
+      subplot_title_y: -0.31
+      ylim:
+        "Llama1B": [0, 1100]
+        "Qwen": [0, 1800]
+        "Opt": [0, 3200]
+      # font size
+      legend_fontsize: 20
+      xlabel_fontsize: 20
+      ylabel_fontsize: 24
+      xticks_fontsize: 16
+      yticks_fontsize: 16
+      subplot_title_fontsize: 24
+      bar_value_fontsize: 16
+
+      sub_group_labels:
+        deepspeed: ${DEEPSPEED}
+        torch_dcp: ${TORCH_DCP}
+        bytecheckpoint: ${BYTECHECKPOINT}
+        torch_snapshot: ${TORCH_SNAPSHOT}
+        torch_dcp_async: ${TORCH_DCP_ASYNC}
+        dlrover_flash: ${DLROVER_FLASH}
+        datastates_llm: ${DATASTATES_LLM}
+        ideal: ${IDEAL}
+        grad: ${GRAD}
+        half_zero: ${HALF_ZERO}
+        py_async: ${PY_ASYNC}
+        cpp_overlap: ${CPP_OVERLAP}
+
+final_output:
+  - name: throughput
+    export: throughput_eg3.pdf

@@ -3,9 +3,13 @@ from typing import Optional, Union, Dict, List, Tuple
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import logging
 from matplotlib.ticker import MaxNLocator  # 用于设置y轴刻度
 from matplotlib.gridspec import GridSpec
 from core.processing import ProcessorRegistry, InputPath
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 @ProcessorRegistry.register(input_type="single", output_ext=".pdf")
 def plot_grouped_bar(input_path: InputPath, output_path: Path,
@@ -153,6 +157,26 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
     # --- 【新增】步骤1：预先进行数据聚合 ---
     group_by_cols = [col for col in [row_col, col_col, main_group_col, sub_group_col] if col]
     aggregated_df = df.groupby(group_by_cols, as_index=False)[value_col].agg(aggregate_func)
+    
+    # 输出数据聚合信息到日志
+    print(f"\n{'='*60}")
+    print(f"数据聚合完成")
+    print(f"{'='*60}")
+    print(f"聚合函数: {aggregate_func}")
+    print(f"分组列: {group_by_cols}")
+    print(f"值列: {value_col}")
+    print(f"原始数据行数: {len(df)}")
+    print(f"聚合后数据行数: {len(aggregated_df)}")
+    print(f"\n聚合后的统计信息:")
+    print(f"  最小值: {aggregated_df[value_col].min():.6f}")
+    print(f"  最大值: {aggregated_df[value_col].max():.6f}")
+    print(f"  平均值: {aggregated_df[value_col].mean():.6f}")
+    print(f"  中位数: {aggregated_df[value_col].median():.6f}")
+    print(f"  标准差: {aggregated_df[value_col].std():.6f}")
+    print(f"\n聚合后的数据预览:")
+    print(f"\n{aggregated_df.to_string()}")
+    print(f"\n{'='*60}")
+    print("\n")
 
     # --- 【新增】步骤2：执行归一化 ---
     norm_params = normalization or {}

@@ -1,22 +1,23 @@
 from pathlib import Path
-from typing import Optional, Union, Dict, List
+from typing import Optional, Union, Dict, List, Tuple
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from core.processing import ProcessorRegistry, InputPath
 
 @ProcessorRegistry.register(input_type="single", output_ext=".pdf")
 def plot_line(input_path: InputPath, output_path: Path,
               figsize: tuple = (10, 6),
               time_col: str = "time",
-              value_col: str = "loss",  # 更通用的Y轴列名
+              value_col: str = "loss",
               tag_col: Optional[str] = None,
-              tag_colors: Union[str, Dict[str, str]] = None,  # 默认改为None
+              tag_colors: Union[str, Dict[str, str]] = None,
               tag_line_styles: Union[str, Dict[str, str]] = "-",
-              legend_labels: Optional[Dict[str, str]] = None,  # 自定义图例标签
-              legend_order: Optional[List[str]] = None,  # 新增：自定义图例顺序
-              title: str = "Line Plot",  # 更通用的标题
+              legend_labels: Optional[Dict[str, str]] = None,
+              legend_order: Optional[List[str]] = None,
+              title: str = "Line Plot",
               xlabel: str = "Time (s)",
-              ylabel: str = "Value",   # 更通用的Y轴标签
+              ylabel: str = "Value",
               grid: bool = True,
               dpi: int = 300,
               xlim: tuple = None,
@@ -46,24 +47,27 @@ def plot_line(input_path: InputPath, output_path: Path,
               legend_bbox_to_anchor: Optional[tuple] = None,
               legend_ncol: int = 1,
               global_font_family: Optional[str] = None,
-              show_restart_annotation: bool = True,
-              annotation_text: str = "Resume",
-              annotation_fontsize: int = 12,
-              arrow_params: Optional[dict] = None,
-              annotation_offset_ratio: float = 0.1,
-              show_restart_vertical_line: bool = False,
-              restart_vertical_line_params: Optional[dict] = None,
-              show_restart_point: bool = False,
-              restart_point_params: Optional[dict] = None):
+              # 新的通用标注参数
+              annotations: Optional[List[Dict]] = None):
     """绘制通用线图，支持分组和样式自定义
     
     Args:
-        legend_labels: 自定义图例标签映射字典。对于分组模式，键为tag_col的原始值；
-                      对于单线模式，键为value_col列名。值为要显示的自定义标签。
-                      示例: {"model_a": "模型A (最优)", "train_loss": "训练损失"}
-        legend_order: 自定义图例顺序列表。对于分组模式，列表元素为tag_col的原始值；
-                      对于单线模式，可忽略此参数。图例会按照此列表顺序显示。
-                      示例: ["model_b", "model_a"]  # 先显示model_b，再显示model_a
+        legend_labels: 自定义图例标签映射字典
+        legend_order: 自定义图例顺序列表
+        annotations: 通用标注配置列表，每个标注包含：
+            - marker_col: 标识标注点的列名（布尔型）
+            - text: 标注文本
+            - fontsize: 文本字体大小，默认12
+            - arrow_params: 箭头样式参数字典
+            - vertical_line: 是否显示垂直线，默认False
+            - vertical_line_params: 垂直线样式参数字典
+            - point: 是否显示标注点，默认False
+            - point_params: 标注点样式参数字典
+            - offset_ratio: 文本偏移比例，默认0.1
+            - show_tick: 是否在x轴上显示该标注点的刻度，默认False
+            - tick_label: 自定义刻度标签，默认使用x轴值
+            - tick_fontsize: 刻度标签字体大小
+            - tick_rotation: 刻度标签旋转角度
     """
     
     # 设置全局字体
@@ -228,45 +232,103 @@ def plot_line(input_path: InputPath, output_path: Path,
     if grid:
         ax.grid(True, linestyle='--', alpha=0.6)
 
-    # 绘制检查点恢复箭头
-    if "restart_point" in df.columns:
-        restart_points = df[df["restart_point"] == True]
-        
-        # 默认箭头样式
-        default_arrow_props = dict(facecolor='black', shrink=0.05)
-        if arrow_params:
-            default_arrow_props.update(arrow_params)
-            
-        # 默认垂直线样式
-        default_vline_props = dict(linestyle='--', color='gray', alpha=0.7)
-        if restart_vertical_line_params:
-            default_vline_props.update(restart_vertical_line_params)
-
-        # 默认恢复点样式
-        default_point_props = dict(color='black', marker='o', s=30, zorder=5)
-        if restart_point_params:
-            default_point_props.update(restart_point_params)
-
+    # 通用标注功能
+    if annotations:
         # 捕获当前的Y轴范围
         current_ylim = ax.get_ylim()
+        y_range = current_ylim[1] - current_ylim[0]
         
-        for _, row in restart_points.iterrows():
-            # 绘制垂直线
-            if show_restart_vertical_line:
-                ax.vlines(x=row[time_col], ymin=current_ylim[0] - (current_ylim[1]-current_ylim[0]), ymax=row[value_col], **default_vline_props)
+        # 收集需要显示刻度的x值
+        tick_positions = []
+        tick_labels = []
+        
+        for annotation_config in annotations:
+            marker_col = annotation_config.get("marker_col")
+            if not marker_col or marker_col not in df.columns:
+                print(f"警告: 标注列 '{marker_col}' 不存在，跳过该标注")
+                continue
             
-            # 绘制恢复点
-            if show_restart_point:
-                ax.scatter(row[time_col], row[value_col], **default_point_props)
+            # 获取标注点
+            marker_points = df[df[marker_col] == True]
+            if marker_points.empty:
+                continue
+            
+            # 默认配置
+            default_arrow_props = dict(facecolor='black', shrink=0.05)
+            default_vline_props = dict(linestyle='--', color='gray', alpha=0.7)
+            default_point_props = dict(color='black', marker='o', s=30, zorder=5)
+            
+            # 合并用户配置
+            arrow_params = {**default_arrow_props, **annotation_config.get("arrow_params", {})}
+            vertical_line_params = {**default_vline_props, **annotation_config.get("vertical_line_params", {})}
+            point_params = {**default_point_props, **annotation_config.get("point_params", {})}
+            
+            text = annotation_config.get("text", "标注")
+            fontsize = annotation_config.get("fontsize", 12)
+            offset_ratio = annotation_config.get("offset_ratio", 0.1)
+            show_vertical_line = annotation_config.get("vertical_line", False)
+            show_point = annotation_config.get("point", False)
+            show_tick = annotation_config.get("show_tick", False)
+            tick_label = annotation_config.get("tick_label")
+            tick_fontsize = annotation_config.get("tick_fontsize", xticks_fontsize)
+            tick_rotation = annotation_config.get("tick_rotation", xticks_rotation)
+            
+            for _, row in marker_points.iterrows():
+                x_val = row[time_col]
+                
+                # 绘制垂直线
+                if show_vertical_line:
+                    ax.vlines(x=x_val, 
+                             ymin=current_ylim[0], 
+                             ymax=row[value_col], 
+                             **vertical_line_params)
+                
+                # 绘制标注点
+                if show_point:
+                    ax.scatter(x_val, row[value_col], **point_params)
 
-            # 绘制注释
-            if show_restart_annotation:
-                ax.annotate(annotation_text, 
-                             xy=(row[time_col], row[value_col]), 
-                             xytext=(row[time_col], row[value_col] + (df[value_col].max() - df[value_col].min()) * annotation_offset_ratio),
-                             arrowprops=default_arrow_props,
-                             fontsize=annotation_fontsize,
-                             horizontalalignment='center')
+                # 绘制箭头和文本
+                ax.annotate(text, 
+                           xy=(x_val, row[value_col]), 
+                           xytext=(x_val, row[value_col] + y_range * offset_ratio),
+                           arrowprops=arrow_params,
+                           fontsize=fontsize,
+                           horizontalalignment='center')
+                
+                # 收集需要显示刻度的x值
+                if show_tick:
+                    tick_positions.append(x_val)
+                    tick_labels.append(tick_label if tick_label else f"{x_val}")
+        
+        # 如果有需要显示的刻度，则添加到x轴
+        if tick_positions:
+            # 获取当前x轴刻度
+            current_ticks = list(ax.get_xticks())
+            current_labels = [tick.get_text() for tick in ax.get_xticklabels()]
+            
+            # 合并当前刻度和标注点刻度
+            all_ticks = sorted(set(current_ticks + tick_positions))
+            
+            # 创建标签列表
+            all_labels = []
+            for tick in all_ticks:
+                if tick in tick_positions:
+                    idx = tick_positions.index(tick)
+                    all_labels.append(tick_labels[idx])
+                else:
+                    # 保持原有标签
+                    if tick in current_ticks:
+                        idx = current_ticks.index(tick)
+                        if idx < len(current_labels):
+                            all_labels.append(current_labels[idx])
+                        else:
+                            all_labels.append(f"{tick}")
+                    else:
+                        all_labels.append(f"{tick}")
+            
+            # 设置x轴刻度
+            ax.set_xticks(all_ticks)
+            ax.set_xticklabels(all_labels, rotation=tick_rotation, fontsize=tick_fontsize)
         
         # 恢复Y轴范围
         ax.set_ylim(current_ylim)
