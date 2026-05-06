@@ -34,8 +34,8 @@ class ProcessorRegistry:
             input_type: 输入类型 (single/multi)
         """
         # 验证input_type参数
-        if input_type not in {"single", "multi"}:
-            raise ValueError(f"无效的input_type：{input_type}，必须是'single'或'multi'")
+        if input_type not in {"single", "multi", "none"}:
+            raise ValueError(f"无效的input_type：{input_type}，必须是'single'、'multi'或'none'")
         # 处理output_ext，确保以点开头
         if not output_ext.startswith("."):
             output_ext = f".{output_ext}"
@@ -137,6 +137,24 @@ class DataProcessor:
         elif input_type == "multi":
             input_paths, entries = self._get_multiple_paths(input_ids)
             output_path, result_tags = self._execute_processor(processor, input_paths, params)
+        elif input_type == "none":
+            # 零输入处理器：无 input_path，无 parents
+            output_path = self.storage.create_processed_file(ext=processor["output_ext"])
+            result_tags = processor["func"](output_path=output_path, **params)
+            if result_tags is None:
+                result_tags = []
+            elif isinstance(result_tags, str):
+                result_tags = [result_tags]
+            entry = DataEntry(
+                type='processed',
+                path=str(output_path),
+                parents=[],
+                description=f"Processed by {processor_name}, params: {params}"
+            )
+            self._add_auto_tags(entry, result_tags)
+            self.session.add(entry)
+            self.session.commit()
+            return entry
         else:
             raise ValueError(f"未知输入类型: {input_type}")
 

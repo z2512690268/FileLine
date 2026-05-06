@@ -207,13 +207,20 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
         colors = [default_colors[i % len(default_colors)] for i in range(len(sub_groups))]
     elif isinstance(colors, dict):
         colors = [colors.get(sg, 'gray') for sg in sub_groups]
-    elif isinstance(colors, list):
+    elif isinstance(colors, str):
+        # 字符串（如"bgrm"）转字符列表，避免与 Union[List, Dict] 类型不匹配
+        colors = list(colors)
+    if isinstance(colors, list) and len(colors) > 0:
         colors = (colors * ((len(sub_groups) // len(colors)) + 1))[:len(sub_groups)]
+    elif not isinstance(colors, list) or len(colors) == 0:
+        # 兜底：colors 为空或类型不匹配时使用默认颜色
+        default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        colors = [default_colors[i % len(default_colors)] for i in range(len(sub_groups))]
 
     hatches_list = [None] * len(sub_groups) # 默认所有柱子都没有花纹
     if isinstance(hatches, dict):
         hatches_list = [hatches.get(sg) for sg in sub_groups] # 从字典查找，找不到则为None
-    elif isinstance(hatches, list):
+    elif isinstance(hatches, list) and len(hatches) > 0:
         # 如果列表比分组少，则循环使用
         temp_hatches = hatches * ((len(sub_groups) // len(hatches)) + 1)
         hatches_list = temp_hatches[:len(sub_groups)]
@@ -260,6 +267,8 @@ def plot_grouped_bar(input_path: InputPath, output_path: Path,
 
     if has_subplots:
         # 创建子图网格
+        import sys
+        print(f"[GROUP_BAR_DEBUG] figsize={figsize!r} type={type(figsize).__name__} dpi={dpi!r}", file=sys.stderr)
         fig = plt.figure(figsize=figsize, dpi=dpi)
         gs = GridSpec(nrows, ncols, figure=fig)
         
