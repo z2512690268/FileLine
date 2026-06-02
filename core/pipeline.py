@@ -54,11 +54,17 @@ class PipelineRunner:
         self.session = session
         self.context = {}
     
-    def execute(self, 
+    def execute(self,
                initial_load: InitialLoadConfig,
                steps: List[PipelineStep],
                debug: bool = False) -> Dict:
         """执行带初始加载的流水线"""
+        # 0. 加载实验自带的 processor (如从 .flxp 导入的)
+        exp_proc_dir = experiment_manager.base_path / "processors"
+        if exp_proc_dir.is_dir():
+            from .processing import load_processors_from_dir
+            load_processors_from_dir(exp_proc_dir)
+
         # 1. 初始文件加载 (返回 {source: [ids]})
         sources = self._load_initial_files(initial_load, debug)
         for src_name, src_ids in sources.items():

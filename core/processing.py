@@ -1,7 +1,9 @@
 # core/processing.py
+import sys
 import inspect
 import shutil
 import tempfile
+import importlib.util
 from pathlib import Path
 from functools import wraps
 from typing import Dict, Callable, Union, List, Type, Optional, Set, Tuple
@@ -293,3 +295,28 @@ class DataProcessor:
                 tag = Tag(name=tag_name)
                 self.session.add(tag)
             entry.tags.append(tag)
+
+
+def load_processors_from_dir(directory: Path):
+    """从任意目录加载 processor Python 文件并注册到系统中
+
+    用于导入的实验自带 processor (如 experiments/<name>/processes/*.py)
+    """
+    if not directory.is_dir():
+        return
+    for py_file in sorted(directory.glob("*.py")):
+        if py_file.stem.startswith("_"):
+            continue
+        # 用 importlib.util 从文件路径加载 (不在 sys.path 中也能加载)
+        module_name = f"_exp_processor_{py_file.stem}"
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, py_file)
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                # 已加载则跳过
+                if module_name in sys.modules:
+                    continue
+                sys.modules[module_name] = mod
+                spec.loader.exec_module(mod)
+        except Exception as e:
+            pass  # 静默跳过无法加载的模块

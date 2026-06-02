@@ -92,8 +92,9 @@ def config(name, key, value):
 @experiment.command()
 @click.argument("name")
 @click.option("--pipelines", help="绑定的 pipeline 文件 (glob, 如 'pipelines/*.yaml')")
+@click.option("--processors", help="绑定的 experiment-specific processor (glob, 如 'processes/*.py')")
 @click.option("--output", "-o", default=None, help="导出文件路径 (默认: ./<name>.flxp)")
-def export(name, pipelines, output):
+def export(name, pipelines, processors, output):
     """导出实验为可移植包 (.flxp) 包含数据/数据库/pipeline"""
     import tarfile
     import json
@@ -116,6 +117,14 @@ def export(name, pipelines, output):
         pipeline_files = _glob.glob(pipelines, recursive=True)
         if not pipeline_files:
             click.secho(f"未找到 pipeline 文件: {pipelines}", fg="yellow")
+
+    # 收集 experiment-specific processor 文件
+    processor_files = []
+    if processors:
+        import glob as _glob
+        processor_files = _glob.glob(processors, recursive=True)
+        if not processor_files:
+            click.secho(f"未找到 processor 文件: {processors}", fg="yellow")
 
     output_path = Path(output or f"{name}.flxp")
     old_project_root = str(experiment_manager.project_root)
@@ -160,6 +169,11 @@ def export(name, pipelines, output):
             arc_name = f"pipelines/{Path(pf).name}"
             tar.add(pf, arcname=arc_name)
 
+        # 添加 experiment-specific processor 文件
+        for pf in processor_files:
+            arc_name = f"processors/{Path(pf).name}"
+            tar.add(pf, arcname=arc_name)
+
         # manifest
         manifest = {
             "type": "fileline-experiment",
@@ -168,6 +182,7 @@ def export(name, pipelines, output):
             "exported_at": datetime.now().isoformat(),
             "old_project_root": old_project_root,
             "pipeline_files": [Path(pf).name for pf in pipeline_files] if pipeline_files else [],
+            "processor_files": [Path(pf).name for pf in processor_files] if processor_files else [],
         }
         import io
         manifest_bytes = json.dumps(manifest, indent=2, ensure_ascii=False).encode()
@@ -276,6 +291,17 @@ def import_cmd(package, name, pipelines_dir):
             if m.name.startswith("pipelines/") and m.isfile():
                 fname = "/".join(m.name.split("/")[1:])
                 target = pipelines_target / fname
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with tar.extractfile(m) as src_f:
+                    with open(str(target), "wb") as dst_f:
+                        shutil.copyfileobj(src_f, dst_f)
+
+        # 解压 experiment-specific processor 文件
+        proc_target = exp_dir / "processors"
+        for m in tar.getmembers():
+            if m.name.startswith("processors/") and m.isfile():
+                fname = "/".join(m.name.split("/")[1:])
+                target = proc_target / fname
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with tar.extractfile(m) as src_f:
                     with open(str(target), "wb") as dst_f:
