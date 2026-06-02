@@ -111,17 +111,23 @@ class PipelineRunner:
                 params=step.params
             )
 
-            # ── 多输出缓存: 仅扁平 (命名多输出不缓存, 因 StepCache 无 group 信息) ──
-            if process_desc["output_type"] == "multi" and not step.outputs and step.cache and not step.force_rerun:
+            # ── 多输出缓存 (StepCache 多行同 hash, 含 group_name) ──
+            if process_desc["output_type"] == "multi" and step.cache and not step.force_rerun:
                 cached_rows = self.session.query(StepCache).filter(
                     StepCache.input_hash == step_hash
                 ).order_by(StepCache.id).all()
                 if cached_rows:
                     cached_ids = [c.output_id for c in cached_rows]
                     if all(self.session.query(DataEntry).get(eid) for eid in cached_ids):
-                        self.context[step.output_var] = cached_ids
+                        if step.outputs:
+                            # 命名多输出: 按 group_name 恢复 context
+                            for c in cached_rows:
+                                if c.group_name and c.group_name in step.outputs:
+                                    self.context[step.outputs[c.group_name]] = [c.output_id]
+                        else:
+                            self.context[step.output_var] = cached_ids
                         if debug:
-                            print(f"  [cache] flat multi: {cached_ids}")
+                            print(f"  [cache] multi: {[c.output_id for c in cached_rows]}")
                             print("-------------------------------------------")
                         continue
 
@@ -177,6 +183,11 @@ class PipelineRunner:
                     elif group_name != step.output_var:
                         var_name = f"{step.output_var}_{group_name}"
                     self.context[var_name] = [e.id for e in group_entries]
+                    # 缓存 (含 group_name)
+                    if step.cache:
+                        for e in group_entries:
+                            self.session.add(StepCache(
+                                input_hash=step_hash, output_id=e.id, group_name=group_name))
                     if debug:
                         print(f"  [{step.output_var}] group '{group_name}' → ${var_name}: {[e.id for e in group_entries]}")
                 if debug:
@@ -206,7 +217,7 @@ class PipelineRunner:
                     print(f"  Exported To: {export_path}")
                 print("-------------------------------------------")
 
-            # 缓存多输出 (list) — 每个输出一行 StepCache
+            # 缓存多输出 (list)
             if step.cache and is_multi:
                 for e in entries:
                     self.session.add(StepCache(input_hash=step_hash, output_id=e.id))

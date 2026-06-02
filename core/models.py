@@ -65,4 +65,5 @@ class StepCache(Base):
     id = Column(Integer, primary_key=True)
     input_hash = Column(String(64), unique=False, index=True)
     output_id = Column(Integer, ForeignKey('data_entries.id'))
+    group_name = Column(String(64), nullable=True)  # 命名多输出的组名
     created_at = Column(DateTime, default=datetime.now)

@@ -32,4 +32,14 @@ def get_session():
 def init_db():
     """按需初始化数据库"""
     if experiment_manager.current_experiment:
-        Base.metadata.create_all(bind=get_engine())
+        engine = get_engine()
+        Base.metadata.create_all(bind=engine)
+        # 迁移: 为 StepCache 添加 group_name 列 (兼容旧库)
+        try:
+            with engine.connect() as conn:
+                conn.execute(
+                    "ALTER TABLE step_cache ADD COLUMN group_name VARCHAR(64)"
+                )
+                conn.commit()
+        except Exception:
+            pass  # 列已存在
