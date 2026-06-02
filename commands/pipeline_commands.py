@@ -43,19 +43,103 @@ def validate_placeholders(content: str):
             "解决方案：使用 --global-config 指定全局配置文件, 并确保所有待替换变量都在其中。\n"
         )
     
+def _match_initial_files(config: dict) -> list:
+    """根据 YAML 的 initial_load 配置模拟文件匹配, 返回 [(spec_index, path), ...]"""
+    import glob as _glob
+    results = []
+    for si, p in enumerate(config["initial_load"]["include"]):
+        matches = _glob.glob(p["path"], recursive=True)
+        # 正则过滤
+        if p.get("regex"):
+            try:
+                _re = re.compile(p["regex"])
+                matches = [m for m in matches if _re.search(m)]
+            except re.error:
+                pass
+        # 排除全局 exclude
+        for ex in config["initial_load"].get("exclude", []):
+            matches = [m for m in matches if not Path(m).match(ex)]
+        # 排序 + limit
+        sort_by = p.get("sort_by")
+        sort_key_re = p.get("sort_key")
+        if sort_by or sort_key_re:
+            if sort_key_re:
+                try:
+                    _kr = re.compile(sort_key_re)
+                    def _kf(f, _r=_kr):
+                        m = _r.search(str(f)); return m.group(1) if m else ""
+                except re.error:
+                    _kf = str
+            else:
+                _kf = str
+            if sort_by == "name_desc":
+                matches.sort(key=_kf, reverse=True)
+            elif sort_by == "mtime":
+                matches.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+            elif sort_by == "mtime_asc":
+                matches.sort(key=lambda f: os.path.getmtime(f))
+            else:
+                matches.sort(key=_kf)
+        if p.get("limit"):
+            matches = matches[:p["limit"]]
+        for m in matches:
+            results.append((si, m))
+    return results
+
+
+def _print_dry_run(config_file, global_config, debug):
+    """打印初始加载匹配结果, 不导入"""
+    variables = {}
+    if global_config:
+        variables = parse_simple_config(Path(global_config).read_text())
+    raw = Path(config_file).read_text()
+    processed = replace_in_text(raw, variables)
+    validate_placeholders(processed)
+    config = yaml.safe_load(processed)
+
+    inc = config["initial_load"]["include"]
+    click.echo(f"═══ Dry-Run: {config_file} ═══")
+    click.echo(f"  包含模式 ({len(inc)} 个):")
+    for i, p in enumerate(inc):
+        extra = []
+        if p.get("regex"): extra.append(f"regex={p['regex']}")
+        if p.get("sort_by"): extra.append(f"sort={p['sort_by']}")
+        if p.get("sort_key"): extra.append(f"key=/{p['sort_key']}/")
+        if p.get("limit"): extra.append(f"limit={p['limit']}")
+        click.echo(f"    [{i}] glob: {p['path']}  ({', '.join(extra)})" if extra else f"    [{i}] glob: {p['path']}")
+
+    matches = _match_initial_files(config)
+    click.echo(f"\n  匹配到 {len(matches)} 个文件:")
+    for si, m in matches:
+        click.echo(f"    [{si}] {m}")
+
+    click.echo(f"\n═══ 步骤 ({len(config['steps'])}) ═══")
+    for i, s in enumerate(config["steps"]):
+        out = s.get("output") or ",".join(s.get("outputs", {}).values())
+        inp = s.get("inputs", "initial")
+        if isinstance(inp, list):
+            inp = ",".join(inp)
+        click.echo(f"    {i+1}. {s['processor']:25s}  {inp:15s}  → {out}")
+
+
 @pipeline.command()
 @click.argument("config_file")
 @click.option("--global-config", type=click.Path(exists=True),
              help="全局配置文件路径（包含变量定义）")
 @click.option("--debug/--no-debug", default=True)
-def run(config_file, global_config, debug):
+@click.option("--dry-run", is_flag=True, help="仅预览匹配文件, 不导入不执行")
+def run(config_file, global_config, debug, dry_run):
     """运行带文件加载的流水线"""
-      # 读取变量定义
+    if dry_run:
+        _print_dry_run(config_file, global_config, debug)
+        return
+
+    # 读取变量定义
     variables = {}
     if global_config:
         var_text = Path(global_config).read_text()
         variables = parse_simple_config(var_text)
-    
+
     # 处理主配置
     raw_config = Path(config_file).read_text()
     processed_config = replace_in_text(raw_config, variables)
@@ -64,7 +148,7 @@ def run(config_file, global_config, debug):
     validate_placeholders(processed_config)
 
     config = yaml.safe_load(processed_config)
-    
+
     # 解析初始加载配置
     load_config = InitialLoadConfig(
         include_patterns=[
@@ -81,8 +165,8 @@ def run(config_file, global_config, debug):
         data_type=config["initial_load"].get("type", "raw"),
         tags=config["initial_load"].get("global_tags", [])
     )
-    
-    # 解析处理步骤 (支持 output 单变量 或 outputs 命名多输出)
+
+    # 解析处理步骤
     steps = []
     for step in config["steps"]:
         out_var = step.get("output", "")
@@ -97,7 +181,7 @@ def run(config_file, global_config, debug):
             force_rerun=step.get("force_rerun", False),
             export=step.get("export", None)
         ))
-    
+
     # 执行流水线
     with get_session() as session:
         runner = PipelineRunner(FileStorage(), session)
