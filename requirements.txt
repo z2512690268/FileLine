@@ -2,8 +2,7 @@ click==8.1.7
 numpy
 pandas
 matplotlib
-seaborn
 tabulate
 pyyaml
 sqlalchemy
-uuid
+streamlit
