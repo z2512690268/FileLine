@@ -31,11 +31,12 @@ class PipelineStep:
 @dataclass
 class IncludeSpec:
     """单个包含模式的配置"""
-    path: str                    # Glob路径模式
-    re_pattern: Optional[str] = None      # 针对该模式的正则表达式
-    tags: Optional[List[str]] = None      # 该模式独有的标签
-    sort_by: Optional[str] = None         # 排序: name_asc/name_desc/mtime/mtime_asc
-    limit: Optional[int] = None           # 取前 N 个 (与 sort_by 配合)
+    path: str                          # Glob路径模式
+    re_pattern: Optional[str] = None   # 针对该模式的正则表达式
+    tags: Optional[List[str]] = None   # 该模式独有的标签
+    sort_by: Optional[str] = None      # 排序: name_asc/name_desc/mtime/mtime_asc
+    sort_key: Optional[str] = None     # 提取排序键的 regex (如 "(\\d{8})" 取日期)
+    limit: Optional[int] = None        # 取前 N 个 (与 sort_by/sort_key 配合)
 
 @dataclass
 class InitialLoadConfig:
@@ -262,14 +263,26 @@ class PipelineRunner:
                     raise ValueError(f"无效的正则表达式 '{spec.re_pattern}': {e}")
 
             # 排序 + 取最新 N 个
-            if spec.sort_by:
+            if spec.sort_by or spec.sort_key:
+                if spec.sort_key:
+                    try:
+                        _key_re = re.compile(spec.sort_key)
+                        def _key_func(f):
+                            m = _key_re.search(str(f))
+                            return m.group(1) if m else ""
+                    except re.error:
+                        _key_func = lambda f: str(f)
+                else:
+                    _key_func = str
+
                 if spec.sort_by == "name_desc":
-                    matches.sort(reverse=True)
+                    matches.sort(key=_key_func, reverse=True)
                 elif spec.sort_by == "mtime":
                     matches.sort(key=lambda f: os.path.getmtime(f), reverse=True)
                 elif spec.sort_by == "mtime_asc":
                     matches.sort(key=lambda f: os.path.getmtime(f))
-                # name_asc 是默认行为 (sorted(all_included) 最后处理)
+                else:  # name_asc 或未指定 sort_by 但有 sort_key
+                    matches.sort(key=_key_func)
             if spec.limit is not None and spec.limit > 0:
                 matches = matches[:spec.limit]
 
