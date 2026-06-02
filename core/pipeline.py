@@ -297,11 +297,12 @@ class PipelineRunner:
     def _load_initial_files(self, config: InitialLoadConfig,
                                 debug: bool = False) -> Dict[str, List[int]]:
         """加载初始文件, 返回 {source_name: [entry_id, ...]}"""
-        # 远程拉取预处理
-        for spec in config.include_patterns:
-            if spec.remote:
-                local_dir = self._sync_remote(spec, debug)
-                spec.path = str(Path(local_dir) / spec.path)
+        # 远程拉取预处理 (仅在非 raw 模式下执行)
+        if experiment_manager.get_experiments().get(experiment_manager.current_experiment, {}).get("source_mode") != "raw":
+            for spec in config.include_patterns:
+                if spec.remote:
+                    local_dir = self._sync_remote(spec, debug)
+                    spec.path = str(Path(local_dir) / spec.path)
 
         # source_mode=raw: 从 DB 过滤已有数据 (按 original_path 匹配 include 模式)
         exp_config = experiment_manager.get_experiments().get(experiment_manager.current_experiment, {})

@@ -50,7 +50,8 @@ class ProcessorRegistry:
             _name = name or func.__name__
             if _name in cls._processors:
                 if not cls._overwrite_mode:
-                    raise ValueError(f"处理器 {_name} 已注册")
+                    # 已注册不覆盖 (实验版本优先, 全局版本静默跳过)
+                    return func
             sig = inspect.signature(func)
             func_hash = cls._calculate_hash(func)
 
