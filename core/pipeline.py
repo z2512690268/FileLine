@@ -62,7 +62,7 @@ class PipelineRunner:
                steps: List[PipelineStep],
                debug: bool = False) -> Dict:
         """执行带初始加载的流水线"""
-        # 0. 加载实验自带的 processor (如从 .flxp 导入的)
+        # 0. 加载实验自带的 processor
         exp_proc_dir = experiment_manager.base_path / "processors"
         if exp_proc_dir.is_dir():
             from .processing import load_processors_from_dir

@@ -185,13 +185,15 @@ def run(config_file, global_config, debug, dry_run):
             export=step.get("export", None)
         ))
 
+    # ── 加载 pipeline 同目录的 processor ──
+    from core.processing import load_processors_from_dir
+    pip_proc = Path(config_file).parent / "processors"
+    if pip_proc.is_dir():
+        load_processors_from_dir(pip_proc)
+
     # ── 自动快照: 把 pipeline/processor 当前版本存入实验目录 ──
     exp_name = experiment_manager.current_experiment
     if exp_name:
-        from core.processing import load_processors_from_dir
-        load_processors_from_dir(
-            experiment_manager.project_root / "experiments" / exp_name / "processors"
-        )
         snap_pip_dir = experiment_manager.project_root / "experiments" / exp_name / "pipelines"
         snap_proc_dir = experiment_manager.project_root / "experiments" / exp_name / "processors"
         snap_pip_dir.mkdir(parents=True, exist_ok=True)
