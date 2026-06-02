@@ -184,17 +184,10 @@ class PipelineRunner:
                 if debug:
                     print(f"已缓存初始文件： {file_path} ，ID: {entry.id}")
             else:
-                # 存储文件
-                stored_path = self.storage.store_raw_data(file_path)
-                # 创建数据条目
-                entry = DataEntry(
-                    type=config.data_type,
-                    path=str(stored_path),
-                    original_path=str(file_path),
-                    description=f"自动加载自: {file_path}",
-                    tags=[]
-                )
-                self.session.add(entry)
+                # 存储文件（内部创建 DataEntry 并获取 ID）
+                entry = self.storage.store_raw_data(file_path, self.session)
+                entry.type = config.data_type
+                entry.description = f"自动加载自: {file_path}"
                 self.session.flush()
                 # 更新缓存
                 self.session.add(FileMTimeCache(

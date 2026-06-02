@@ -116,14 +116,14 @@ class DataProcessor:
         self.storage = storage
         self.session = db_session
     
-    def run(self, 
+    def run(self,
            processor_name: str,
            input_ids: Union[int, List[int]],
            **params) -> DataEntry:
         """执行数据处理流程"""
         processor = ProcessorRegistry.get_processor(processor_name)
         input_type = processor["input_type"]
-        
+
         # 获取输入路径
         if input_type == "single":
             if not isinstance(input_ids, int):
@@ -133,43 +133,34 @@ class DataProcessor:
                     raise ValueError("单个输入类型只能输入单个数据记录")
                 input_ids = input_ids[0]
             input_path, entries = self._get_single_path(input_ids)
-            output_path, result_tags = self._execute_processor(processor, input_path, params)
+            result_tags, entry = self._execute_processor(processor, input_path, params)
         elif input_type == "multi":
             input_paths, entries = self._get_multiple_paths(input_ids)
-            output_path, result_tags = self._execute_processor(processor, input_paths, params)
+            result_tags, entry = self._execute_processor(processor, input_paths, params)
         elif input_type == "none":
-            # 零输入处理器：无 input_path，无 parents
-            output_path = self.storage.create_processed_file(ext=processor["output_ext"])
+            # 零输入处理器：先创建条目获取 ID 命名文件
+            output_path, entry = self.storage.create_processed_file(
+                ext=processor["output_ext"], session=self.session
+            )
             result_tags = processor["func"](output_path=output_path, **params)
             if result_tags is None:
                 result_tags = []
             elif isinstance(result_tags, str):
                 result_tags = [result_tags]
-            entry = DataEntry(
-                type='processed',
-                path=str(output_path),
-                parents=[],
-                description=f"Processed by {processor_name}, params: {params}"
-            )
+            entry.description = f"Processed by {processor_name}, params: {params}"
+            entry.parents = []
             self._add_auto_tags(entry, result_tags)
-            self.session.add(entry)
             self.session.commit()
             return entry
         else:
             raise ValueError(f"未知输入类型: {input_type}")
 
-        # 创建数据记录
-        entry = DataEntry(
-            type='processed',
-            path=str(output_path),
-            parents=entries,
-            description=f"Processed by {processor_name}, id: {input_ids}, params: {params}"
+        # single/multi: 填充已创建的条目
+        entry.description = (
+            f"Processed by {processor_name}, id: {input_ids}, params: {params}"
         )
-
-        # 添加自动生成的标签
+        entry.parents = entries
         self._add_auto_tags(entry, result_tags)
-
-        self.session.add(entry)
         self.session.commit()
         return entry
 
@@ -201,13 +192,13 @@ class DataProcessor:
             datas.append(entry)
         return entries, datas
     
-    def _execute_processor(self, processor: dict, input_paths: Union[dict, List[dict]], params: dict) -> Path:
-        """执行处理函数"""
-        # 调用处理函数
-        output_path = self.storage.create_processed_file(ext=processor["output_ext"])
-        # 调用处理函数并获取返回值
+    def _execute_processor(self, processor: dict, input_paths, params: dict):
+        """执行处理函数，返回 (result_tags, entry)"""
+        output_path, entry = self.storage.create_processed_file(
+            ext=processor["output_ext"], session=self.session
+        )
         result_tags = processor["func"](input_paths, output_path=output_path, **params)
-        
+
         # 标准化返回值格式
         if result_tags is None:
             result_tags = []
@@ -215,8 +206,8 @@ class DataProcessor:
             result_tags = [result_tags]
         elif not isinstance(result_tags, (list, tuple)):
             raise ValueError("处理函数返回值必须是字符串或列表")
-        
-        return output_path, result_tags
+
+        return result_tags, entry
 
     def _add_auto_tags(self, entry: DataEntry, tags: list):
         """添加自动生成的标签"""

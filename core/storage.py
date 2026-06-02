@@ -1,10 +1,10 @@
 # core/storage.py
 import shutil
 from pathlib import Path
-import uuid
 import json
 from datetime import datetime
 from .base import experiment_manager
+
 
 class FileStorage:
     @property
@@ -37,19 +37,31 @@ class FileStorage:
         with meta_path.open("w", encoding="utf-8") as f:
             json.dump(self._meta_cache, f, indent=2, ensure_ascii=False)
 
-    def store_raw_data(self, file_path):
-        """存储原始数据"""
-        unique_id = uuid.uuid4().hex
+    def store_raw_data(self, file_path, session):
+        """存储原始数据，先创建条目获取 ID，以 {id}{ext} 命名"""
+        from .models import DataEntry
         ext = Path(file_path).suffix
-        target_path = self.base_path/"raw"/f"{unique_id}{ext}"
+        entry = DataEntry(
+            type='raw',
+            original_path=str(Path(file_path).absolute()),
+        )
+        session.add(entry)
+        session.flush()
+        target_path = self.base_path / "raw" / f"{entry.id}{ext}"
         shutil.copy(file_path, target_path)
-        return target_path
-    
-    def create_processed_file(self, ext=".csv"):
-        """创建处理后的文件"""
-        unique_id = uuid.uuid4().hex
-        target_path = self.base_path/"processed"/f"{unique_id}{ext}"
-        return target_path
+        entry.path = str(target_path)
+        return entry
+
+    def create_processed_file(self, ext=".csv", session=None):
+        """创建处理文件，先创建条目获取 ID，以 {id}{ext} 命名，返回 (path, entry)"""
+        from .models import DataEntry
+        entry = DataEntry(type='processed')
+        if session:
+            session.add(entry)
+            session.flush()
+        target_path = self.base_path / "processed" / f"{entry.id}{ext}"
+        entry.path = str(target_path)
+        return target_path, entry
     
     def create_export_file(self, name: str, file_id: int) -> Path:
         """创建导出文件并更新元信息
