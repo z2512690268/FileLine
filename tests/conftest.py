@@ -21,22 +21,31 @@ from core.models import Base
 
 @pytest.fixture(scope="function")
 def test_experiment():
-    """创建/清理一个独立测试实验"""
+    """创建/清理一个独立测试实验（不会影响用户的实验数据）"""
     name = f"_test_{datetime.now().strftime('%H%M%S%f')}"
-    experiment_manager.create(name, "pytest temp")
     old_current = experiment_manager.current_experiment
+    experiment_manager.create(name, "pytest temp")
     experiment_manager.set_current(name)
     init_db()
-    yield name
-    # 清理
-    experiment_manager.set_current(old_current) if old_current else None
-    exps = experiment_manager.get_experiments()
-    exp_dir = experiment_manager._PROJECT_ROOT / "experiments" / name
-    if name in exps:
-        del exps[name]
-        experiment_manager._save_experiments(exps)
-    if exp_dir.exists():
-        shutil.rmtree(exp_dir)
+    try:
+        yield name
+    finally:
+        # 切回之前的实验
+        if old_current:
+            try:
+                experiment_manager.set_current(old_current)
+            except ValueError:
+                pass
+        else:
+            experiment_manager.delete_current()
+        # 删除测试实验
+        exps = experiment_manager.get_experiments()
+        exp_dir = experiment_manager._PROJECT_ROOT / "experiments" / name
+        if name in exps:
+            del exps[name]
+            experiment_manager._save_experiments(exps)
+        if exp_dir.exists():
+            shutil.rmtree(exp_dir)
 
 
 @pytest.fixture(scope="function")
