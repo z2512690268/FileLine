@@ -225,9 +225,10 @@ def plot_line(input_path: InputPath, output_path: Path,
         if font_props:
             legend_params['prop'] = font_props
         
-        # 创建手动图例
-        ax.legend(line_objects, labels, 
-                  **{k: v for k, v in legend_params.items() if v is not None})
+        # 创建手动图例（仅当有 tag_col 时）
+        if tag_col is not None:
+            ax.legend(line_objects, labels,
+                      **{k: v for k, v in legend_params.items() if v is not None})
     
     if grid:
         ax.grid(True, linestyle='--', alpha=0.6)
