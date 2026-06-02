@@ -297,6 +297,18 @@ class PipelineRunner:
                 src = spec.source
                 source_buckets.setdefault(src, []).extend(matches)
                 spec_tags.setdefault(src, []).extend(spec.tags or [])
+            # 每个 original_path 只取最新的一条 (去重)
+            for src in list(source_buckets.keys()):
+                before = len(source_buckets[src])
+                seen = {}
+                for e in source_buckets[src]:
+                    key = e.original_path or str(e.id)
+                    if key not in seen or e.id > seen[key].id:
+                        seen[key] = e
+                source_buckets[src] = list(seen.values())
+                if debug and len(seen) < before:
+                    click.echo(f"  [source_mode=raw] {src}: 去重 {before}→{len(seen)}")
+
             if not any(v for v in source_buckets.values()):
                 # fallback: 无法匹配时用全部 (兼容旧 YAML 没有特定路径)
                 source_buckets = {"initial": all_raw}
