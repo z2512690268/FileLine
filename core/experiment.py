@@ -68,6 +68,7 @@ class ExperimentManager:
         experiments[name] = {
             "database": str(Path("experiments") / name / f"{name}.db"),
             "data_root": str(Path("experiments") / name),
+            "source_mode": "auto",
             "description": description,
             "created_at": datetime.now().isoformat()
         }

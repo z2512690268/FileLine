@@ -73,6 +73,24 @@ def delete(name):
 
 @experiment.command()
 @click.argument("name")
+@click.argument("key")
+@click.argument("value")
+def config(name, key, value):
+    """修改实验配置 (如 source_mode)"""
+    exps = experiment_manager.get_experiments()
+    if name not in exps:
+        click.secho(f"实验 {name} 不存在", fg="red")
+        return
+    if key not in ("source_mode", "description"):
+        click.secho(f"不支持配置项: {key} (支持: source_mode, description)", fg="red")
+        return
+    exps[name][key] = value
+    experiment_manager._save_experiments(exps)
+    click.secho(f"实验 {name} 的 {key} 已设为 {value}", fg="green")
+
+
+@experiment.command()
+@click.argument("name")
 @click.option("--pipelines", help="绑定的 pipeline 文件 (glob, 如 'pipelines/*.yaml')")
 @click.option("--output", "-o", default=None, help="导出文件路径 (默认: ./<name>.flxp)")
 def export(name, pipelines, output):
@@ -192,8 +210,12 @@ def import_cmd(package, name, pipelines_dir):
         old_root = manifest["old_project_root"]
         new_root = str(experiment_manager.project_root)
 
-        # 创建实验
+        # 创建实验 (设置为 raw 模式: 使用缓存数据而非原始路径)
         experiment_manager.create(exp_name, f"从 {Path(package).name} 导入")
+        exps = experiment_manager.get_experiments()
+        if exp_name in exps:
+            exps[exp_name]["source_mode"] = "raw"
+            experiment_manager._save_experiments(exps)
         # 如果当前实验就是导入目标, 先切走避免 init_db() 失败
         if experiment_manager.current_experiment == exp_name:
             temp_name = f"_tmp_{exp_name}"

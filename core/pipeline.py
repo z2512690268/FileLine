@@ -1,5 +1,7 @@
 # core/pipeline.py
+import click
 from pathlib import Path
+from .base import experiment_manager
 from typing import List, Dict, Union, Set
 from dataclasses import dataclass
 from copy import deepcopy
@@ -247,6 +249,23 @@ class PipelineRunner:
     def _load_initial_files(self, config: InitialLoadConfig,
                                 debug: bool = False) -> Dict[str, List[int]]:
         """加载初始文件, 返回 {source_name: [entry_id, ...]}"""
+        # source_mode=raw: 直接用 DB 已有的 raw 数据
+        exp_config = experiment_manager.get_experiments().get(experiment_manager.current_experiment, {})
+        if exp_config.get("source_mode") == "raw":
+            existing = self.session.query(DataEntry).filter(
+                DataEntry.type == config.data_type
+            ).order_by(DataEntry.id).all()
+            if existing:
+                if debug:
+                    click.echo(f"  [source_mode=raw] 复用 {len(existing)} 条已有记录")
+                # 按 source 分组 (默认 initial)
+                result = {"initial": [e.id for e in existing]}
+                if debug:
+                    for e in existing:
+                        click.echo(f"    {e.id}: {e.path}")
+                    print("-------------------------------------------")
+                return result
+
         source_buckets: Dict[str, List[Path]] = {}
         spec_tags: Dict[str, List[str]] = {}
         for spec in config.include_patterns:

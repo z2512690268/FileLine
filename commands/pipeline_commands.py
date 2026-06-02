@@ -164,7 +164,7 @@ def run(config_file, global_config, debug, dry_run):
         ],
         exclude_patterns=config["initial_load"].get("exclude", []),
         data_type=config["initial_load"].get("type", "raw"),
-        tags=config["initial_load"].get("global_tags", [])
+        tags=config["initial_load"].get("global_tags", []),
     )
 
     # 解析处理步骤
