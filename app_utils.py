@@ -187,8 +187,9 @@ def run_processor(
         storage = FileStorage()
         with get_session() as session:
             processor = DataProcessor(storage, session)
-            entry = processor.run(processor_name, input_ids, **params)
+            result = processor.run(processor_name, input_ids, **params)
             session.commit()
+            entry = result[0] if isinstance(result, list) else result
             return {
                 "id": entry.id,
                 "path": str(entry.path),
@@ -566,21 +567,30 @@ def execute_pipeline(
             else:
                 run_input = input_ids[0]
 
-            entry = processor.run(step.processor_name, run_input, **step.params)
-            context[step.output_var] = [entry.id]
+            result = processor.run(step.processor_name, run_input, **step.params)
+
+            if isinstance(result, list):
+                entries = result
+                context[step.output_var] = [e.id for e in entries]
+            else:
+                entries = [result]
+                context[step.output_var] = [result.id]
+
             session.commit()
 
-            result = PipelineExecutionResult(
-                output_var=step.output_var,
-                processor_name=step.processor_name,
-                entry_id=entry.id,
-                entry_path=str(entry.path),
-                entry_type=entry.type,
-                parent_ids=[p.id for p in entry.parents],
-            )
-            results.append(result)
+            for entry in entries:
+                step_result = PipelineExecutionResult(
+                    output_var=step.output_var,
+                    processor_name=step.processor_name,
+                    entry_id=entry.id,
+                    entry_path=str(entry.path),
+                    entry_type=entry.type,
+                    parent_ids=[p.id for p in entry.parents],
+                )
+                results.append(step_result)
+
             if partial_results is not None:
-                partial_results[step.output_var] = result
+                partial_results[step.output_var] = entries[0]
 
     if progress_callback:
         progress_callback(total, total, "完成")

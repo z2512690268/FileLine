@@ -25,24 +25,27 @@ def run(processor_name, input_ids, param):
         
         # 执行处理
         processor = DataProcessor(FileStorage(), session)
-        entry = processor.run(
+        result = processor.run(
             processor_name=processor_name,
             input_ids=inputs,
             **params
         )
-        
+        entries = result if isinstance(result, list) else [result]
+
         # 记录操作历史
-        HistoryManager(session).log_operation(
-            entry, 
-            op_type='process',
-            params={
-                'processor': processor_name,
-                'inputs': inputs,
-                'params': params
-            }
-        )
+        for entry in entries:
+            HistoryManager(session).log_operation(
+                entry,
+                op_type='process',
+                params={
+                    'processor': processor_name,
+                    'inputs': inputs,
+                    'params': params
+                }
+            )
         session.commit()
-        click.secho(f"处理成功！生成数据ID: {entry.id}", fg='green')
+        ids_str = ", ".join(str(e.id) for e in entries)
+        click.secho(f"处理成功！生成数据ID: {ids_str}", fg='green')
 
 def _parse_input_ids(input_str: str) -> List[int]:
     """解析输入ID为列表"""

@@ -89,36 +89,41 @@ class PipelineRunner:
                         print("Exported To Path: ", export_path)
                     print("-------------------------------------------")
                 continue
-                
+
             if debug:
                 print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
 
-            entry = processor.run(
+            result = processor.run(
                 processor_name=step.processor,
                 input_ids=resolved_ids,
                 **step.params
             )
 
-            # 记录缓存
-            if step.cache:
+            is_multi = isinstance(result, list)
+            entries = result if is_multi else [result]
+
+            # 记录缓存（仅单输出）
+            if step.cache and not is_multi:
                 self.session.add(StepCache(
                     input_hash=step_hash,
-                    output_id=entry.id,
+                    output_id=entries[0].id,
                 ))
 
+            # 导出
             if step.export:
-                export_path = self.storage.create_export_file(step.export, entry.id)
-                shutil.copy(entry.path, export_path)
-            
+                first = entries[0]
+                export_path = self.storage.create_export_file(step.export, first.id)
+                shutil.copy(first.path, export_path)
+
             if debug:
-                print("Generated Output ID: ", entry.id)
-                print("Generated Output Path: ", entry.path) 
+                for e in entries:
+                    print(f"  Output ID: {e.id}, Path: {e.path}")
                 if step.export:
-                    print("Exported To Path: ", export_path)
+                    print(f"  Exported To: {export_path}")
                 print("-------------------------------------------")
 
-            self.context[step.output_var] = [entry.id]
-            self._log_step(step, entry.id)
+            self.context[step.output_var] = [e.id for e in entries]
+            self._log_step(step, entries[0].id)
         
         return self.context
 

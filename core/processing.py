@@ -1,8 +1,10 @@
 # core/processing.py
 import inspect
+import shutil
+import tempfile
 from pathlib import Path
 from functools import wraps
-from typing import Dict, Callable, Union, List, Type, Optional, Set
+from typing import Dict, Callable, Union, List, Type, Optional, Set, Tuple
 import hashlib
 from dataclasses import dataclass
 from .models import DataEntry, Tag
@@ -26,23 +28,23 @@ class ProcessorRegistry:
         return decorator
 
     @classmethod
-    def register(cls, name: Optional[str] = None, input_type: str = "single", output_ext: str = ".txt"):
+    def register(cls, name: Optional[str] = None, input_type: str = "single",
+                 output_type: str = "single", output_ext: str = ".txt"):
         """注册处理函数的装饰器
-        
+
         Args:
             name: 处理器名称
-            input_type: 输入类型 (single/multi)
+            input_type: 输入类型 (single/multi/none)
+            output_type: 输出类型 (single/multi)
         """
-        # 验证input_type参数
         if input_type not in {"single", "multi", "none"}:
-            raise ValueError(f"无效的input_type：{input_type}，必须是'single'、'multi'或'none'")
-        # 处理output_ext，确保以点开头
+            raise ValueError(f"无效的input_type：{input_type}")
+        if output_type not in {"single", "multi"}:
+            raise ValueError(f"无效的output_type：{output_type}")
         if not output_ext.startswith("."):
             output_ext = f".{output_ext}"
         def decorator(func: Callable):
-            _name = name  # 使用 _name 避免修改闭包变量
-            if _name is None:
-                _name = func.__name__
+            _name = name or func.__name__
             if _name in cls._processors:
                 raise ValueError(f"处理器 {_name} 已注册")
             sig = inspect.signature(func)
@@ -51,10 +53,11 @@ class ProcessorRegistry:
             @wraps(func)
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
-            
+
             cls._processors[_name] = {
                 "func": wrapper,
                 "input_type": input_type,
+                "output_type": output_type,
                 "output_ext": output_ext,
                 "hash": func_hash
             }
@@ -116,15 +119,13 @@ class DataProcessor:
         self.storage = storage
         self.session = db_session
     
-    def run(self,
-           processor_name: str,
-           input_ids: Union[int, List[int]],
-           **params) -> DataEntry:
-        """执行数据处理流程"""
+    def run(self, processor_name: str, input_ids, **params) -> Union[DataEntry, List[DataEntry]]:
+        """执行数据处理流程，单输出返回 DataEntry，多输出返回 List[DataEntry]"""
         processor = ProcessorRegistry.get_processor(processor_name)
         input_type = processor["input_type"]
+        output_type = processor.get("output_type", "single")
 
-        # 获取输入路径
+        # ---------- 准备输入 ----------
         if input_type == "single":
             if not isinstance(input_ids, int):
                 if len(input_ids) == 0:
@@ -132,37 +133,93 @@ class DataProcessor:
                 if len(input_ids) != 1:
                     raise ValueError("单个输入类型只能输入单个数据记录")
                 input_ids = input_ids[0]
-            input_path, entries = self._get_single_path(input_ids)
-            result_tags, entry = self._execute_processor(processor, input_path, params)
+            input_path, parent_entries = self._get_single_path(input_ids)
+            proc_input = input_path
         elif input_type == "multi":
-            input_paths, entries = self._get_multiple_paths(input_ids)
-            result_tags, entry = self._execute_processor(processor, input_paths, params)
+            input_paths, parent_entries = self._get_multiple_paths(input_ids)
+            proc_input = input_paths
         elif input_type == "none":
-            # 零输入处理器：先创建条目获取 ID 命名文件
+            parent_entries = []
+            proc_input = None
+        else:
+            raise ValueError(f"未知输入类型: {input_type}")
+
+        # ---------- 执行 ----------
+        if output_type == "multi":
+            return self._run_multi(processor, processor_name, params, proc_input, parent_entries)
+        else:
+            return self._run_single(processor, processor_name, params, proc_input, parent_entries)
+
+    def _run_single(self, processor, processor_name, params, proc_input, parent_entries) -> DataEntry:
+        """单输出执行"""
+        if proc_input is not None:
+            # input_type = single / multi
+            output_path, entry = self.storage.create_processed_file(
+                ext=processor["output_ext"], session=self.session
+            )
+            result_tags = processor["func"](proc_input, output_path=output_path, **params)
+        else:
+            # input_type = none
             output_path, entry = self.storage.create_processed_file(
                 ext=processor["output_ext"], session=self.session
             )
             result_tags = processor["func"](output_path=output_path, **params)
-            if result_tags is None:
-                result_tags = []
-            elif isinstance(result_tags, str):
-                result_tags = [result_tags]
-            entry.description = f"Processed by {processor_name}, params: {params}"
             entry.parents = []
-            self._add_auto_tags(entry, result_tags)
-            self.session.commit()
-            return entry
-        else:
-            raise ValueError(f"未知输入类型: {input_type}")
 
-        # single/multi: 填充已创建的条目
-        entry.description = (
-            f"Processed by {processor_name}, id: {input_ids}, params: {params}"
-        )
-        entry.parents = entries
+        if result_tags is None:
+            result_tags = []
+        elif isinstance(result_tags, str):
+            result_tags = [result_tags]
+        elif not isinstance(result_tags, (list, tuple)):
+            raise ValueError("处理函数返回值必须是字符串或列表")
+
+        desc_args = f"id: {proc_input.id if hasattr(proc_input, 'id') else 'none'}, params: {params}" \
+            if proc_input is not None else f"params: {params}"
+        entry.description = f"Processed by {processor_name}, {desc_args}"
+        if parent_entries:
+            entry.parents = parent_entries
         self._add_auto_tags(entry, result_tags)
         self.session.commit()
         return entry
+
+    def _run_multi(self, processor, processor_name, params, proc_input, parent_entries) -> List[DataEntry]:
+        """多输出执行：processor 接收 output_dir，返回 [(filename, tags), ...]"""
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            kwargs = {"output_dir": tmpdir, **params}
+            if proc_input is not None:
+                results = processor["func"](proc_input, **kwargs)
+            else:
+                results = processor["func"](**kwargs)
+
+            if not results:
+                return []
+
+            created = []
+            for item in results:
+                if isinstance(item, str):
+                    filename, raw_tags = item, []
+                elif isinstance(item, (list, tuple)):
+                    filename = item[0]
+                    raw_tags = item[1] if len(item) > 1 else []
+                else:
+                    filename, raw_tags = str(item), []
+                tags = [raw_tags] if isinstance(raw_tags, str) else list(raw_tags)
+                src = tmpdir / filename
+                ext = src.suffix
+                _, entry = self.storage.create_processed_file(ext=ext, session=self.session)
+                shutil.copy(src, entry.path)
+                desc_args = f"id: {proc_input.id if hasattr(proc_input, 'id') else 'none'}, params: {params}" \
+                    if proc_input is not None else f"params: {params}"
+                entry.description = f"Processed by {processor_name}, {desc_args}"
+                if parent_entries:
+                    entry.parents = parent_entries
+                self._add_auto_tags(entry, tags)
+                created.append(entry)
+            self.session.commit()
+            return created
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _get_single_path(self, input_id: int) -> Path:
         """获取单个输入路径"""
