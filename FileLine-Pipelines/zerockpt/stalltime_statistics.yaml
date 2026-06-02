@@ -1,0 +1,36 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/const_freq/*.log"  # 使用*和**匹配子目录
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+
+  - processor: filter_table
+    inputs: parsed
+    output: filtered_statistics
+    params:
+      conditions:
+        record_type: in ["Full Stall"]
+
+  # --- 使用您自己的 groupby_table 处理器 ---
+  - processor: groupby_table
+    inputs: filtered_statistics
+    output: aggregated_by_filename
+    params:
+      # 分组的键，对应 group_keys 参数
+      group_keys: 
+        - "file_name"
+      # 聚合操作，对应 aggregations 参数
+      # 格式为: { "要聚合的列": "聚合函数" }
+      aggregations:
+        stall_duration: "max"  # 对 stall_duration 列取平均值
+
+final_output:
+  - name: filtered_statistics
+    export: full_stall.parquet
+  - name: aggregated_by_filename
+    export: max_stall_by_file.parquet

@@ -1,0 +1,91 @@
+initial_load:
+  include: 
+    # - path: "/root/keyao/Checkpoints/ZeroCkpt/expr_manager/Llama-grad-400-100-1-512-True.log"  # 使用*和**匹配子目录
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/expr_manager/test_data/Llama-half_zero-400-100-1-512-True.log"
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+
+  - processor: filter_single_save
+    inputs: parsed
+    output: filtered
+    params:
+      start_step: 300
+      end_step: 306
+  
+  - processor: rearrange_single_save_halfzero
+    inputs: filtered
+    output: rearranged
+  
+  # --- 新增的过滤步骤 ---
+  - processor: filter_by_condition
+    inputs: rearranged
+    output: rearranged_no_background # 创建一个不含背景数据的新中间结果
+    params:
+      # 自定义定义过滤条件
+      filter_expression: "category != 'Background'"
+
+  - processor: plot_timeline_hbar
+    inputs: rearranged_no_background
+    output: timeline_hbar
+    params:
+      figsize: [18, 2.5]
+      category_col: "category"
+      sub_category_col: "sub_category"
+      title: ""
+      start_col: "start_sec"
+      end_col: "end_sec"
+      min_label_duration_ratio: 0.5
+      hbar_height: 0.8
+      category_order: ["Transfer", "Compute"]
+      ylim: [-0.85, 1.85]  # 3个变2个，修改一下宽度
+      grid: False
+      color_map:
+        # 为Compute的子类别分配不同颜色
+        Forward: "#B07AA1"       # 绿色
+        Backward: "#59A14F"      # 蓝色
+        Update: "#4E79A7"        # 紫色
+        HPT_1: "#FF0000" # 红色 
+        # 为Transfer的子类别分配不同颜色
+        LPT: "#FFBB78"     # 黄色
+        HPT: "#FF7F0E" # 橙色
+
+
+      show_legend: False
+      legend_loc: "lower center"
+      legend_bbox_to_anchor: [0.5, 1] # 使用 [0.5, Y] 来垂直移动，Y值小于1
+      legend_ncol: 6 # 保持横向排列
+      legend_frameon: False # 可以去掉图例边框，让它更清爽
+      legend_sigle_edgecolor: "#000000"  # 事件块边框颜色
+      # exclude_from_legend: ["HPT_1"]  # 不需要的图例
+      legend_rename_map:
+        LPT: "Model & Optimizer"
+        HPT: "Gradient"
+        HPT_1: "Stall"
+
+      # 透明度
+      axhline_aplha: 0
+      barh_alpha: 1.00
+
+      # 其他杂项
+      edge_color: "#0F0F0F"  # 事件块边框颜色
+
+      # font family
+      title_fontfamily: 'Times New Roman'
+      xlabel_fontfamily: 'Times New Roman'
+      ylabel_fontfamily: 'Times New Roman'
+      tick_fontfamily: 'Times New Roman'
+      legend_fontfamily: 'Times New Roman'
+      # font size
+      legend_fontsize: 21
+      xlabel_fontsize: 24
+      ylabel_fontsize: 20
+      tick_fontsize: 21
+
+final_output:
+  - name: timeline_hbar
+    export: breakdown_halfzero.pdf

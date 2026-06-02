@@ -1,0 +1,45 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/time_expr/*.log"  # 使用**匹配子目录
+  type: raw
+  global_tags: []
+
+steps:
+  - processor: parse_multi_runtime
+    inputs: initial
+    output: parsed
+
+  - processor: filter_runtime
+    inputs: parsed
+    output: filtered
+    params:
+      type: "throughput_global"
+      num_steps: 150
+
+
+  - processor: plot_grouped_bar
+    inputs: filtered
+    output: throughput_global_model_ckpt_group_bar
+    params:
+      main_group_col: "model"
+      sub_group_col: "ckpt_sol"
+      value_col: "Token_per_sec"
+      title: "Throughput Group Bar Chart1"
+      xlabel: "Model Category"
+      ylabel: "Throughput (Tokens/s)"
+      grid: False
+      ylim: [0, 2800]
+      yticks_num: 6
+      # xticks_num: 10
+      legend_loc: "upper center"
+      legend_ncol: 5
+      
+      legend_bbox_to_anchor: [0.5, 1.2]
+      show_main_group_separators: True
+      main_group_order: ["Opt", "Qwen", "Llama"]
+      main_group_labels: {"Opt": "Opt-350M", "Qwen": "Qwen3-0.6B", "Llama": "Llama3.1-1B"}
+      sub_group_order: ["torch_dcp", "deepspeed", "dlrover_flash", "datastates_llm", "torch_dcp_async", "torch_snapshot", "cpp_overlap", "grad", "half_zero", "ideal"]
+
+final_output: 
+  - name: throughput_global_model_ckpt_group_bar
+    export: throughput_global_model_ckpt_group_bar.pdf

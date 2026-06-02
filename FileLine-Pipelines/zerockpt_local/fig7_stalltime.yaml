@@ -1,0 +1,91 @@
+initial_load:
+  include:
+    - path: "/home/keyao/cloudcli/FileLine/data/const_freq/*.log"
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+
+  - processor: adjust_datastates_stall_duration
+    inputs: parsed
+    output: adjusted
+
+  - processor: filter_table
+    inputs: adjusted
+    output: filtered
+    params:
+      conditions:
+        record_type: in ["Full Stall"]
+        ckpt_freq: in [50]
+        ckpt_type: in ["cpp_overlap", "grad", "half_zero"]
+
+  - processor: plot_grouped_bar
+    inputs: filtered
+    output: stalltime_fig7
+    params:
+      figsize: [5, 3.5]
+      main_group_col: "model_name"
+      sub_group_col: "ckpt_type"
+      value_col: "stall_duration"
+      title: ""
+      xlabel: "Model Category"
+      ylabel: "Avg Stall Time (s)"
+      grid: False
+      ylim: [0, 1.6]
+      yticks_num: 5
+
+      main_group_order:
+        - "Llama1B"
+
+      sub_group_order:
+        - "cpp_overlap"
+        - "grad"
+        - "half_zero"
+
+      main_group_labels:
+        "Llama1B": "LLaMA3.2-1B"
+
+      sub_group_labels:
+        "cpp_overlap": "Async-O"
+        "grad": "GoCkpt"
+        "half_zero": "GoCkpt-O"
+
+      colors:
+        "cpp_overlap": "#FFDBF5"
+        "grad": "#4956A2"
+        "half_zero": "#D91A26"
+
+      legend_edgecolor: "#3c3b3bff"
+      legend_ncol: 2
+
+      title_fontfamily: "Times New Roman"
+      xlabel_fontfamily: "Times New Roman"
+      ylabel_fontfamily: "Times New Roman"
+      xticks_fontfamily: "Times New Roman"
+      yticks_fontfamily: "Times New Roman"
+      subplot_title_fontfamily: "Times New Roman"
+      legend_fontfamily: "Times New Roman"
+
+      show_bar_values: True
+      bar_value_format: '{:.3f}'
+      bar_value_fontsize: 14
+      bar_value_rotation: 0
+
+      bar_width: 0.3
+      main_group_gap: 0.1
+      sub_group_gap: 0.01
+      xlabel_pad: 10
+
+      legend_fontsize: 14
+      xlabel_fontsize: 14
+      ylabel_fontsize: 14
+      xticks_fontsize: 14
+      yticks_fontsize: 14
+      bar_value_fontsize: 14
+
+final_output:
+  - name: stalltime_fig7
+    export: stalltime_fig7.pdf

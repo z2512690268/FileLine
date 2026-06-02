@@ -1,0 +1,38 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/throughput_std/*.log"  # 使用**匹配子目录
+  type: raw
+  global_tags: []
+
+steps:
+  - processor: parse_multi_runtime
+    inputs: initial
+    output: parsed
+
+  - processor: filter_runtime
+    inputs: parsed
+    output: filtered
+    params:
+      type: "loss"
+
+  - processor: plot_grouped_bar
+    inputs: filtered
+    output: loss_batch_seq
+    params:
+      main_group_col: "batch_size"
+      sub_group_col: "seq_len"
+      value_col: "window_loss"
+      title: "Loss Group Bar Chart"
+      xlabel: "Batch Size"
+      ylabel: "Loss"
+      grid: False
+      ylim: [0, 6]
+      yticks_num: 6
+      # xticks_num: 10
+      legend_loc: "upper left"
+      show_main_group_separators: True
+      sub_group_labels: {128: "seq_len=128", 256: "seq_len=256", 512: "seq_len=512", 1024: "seq_len=1024"}
+
+final_output: 
+  - name: loss_batch_seq
+    export: loss_batch_seq.pdf

@@ -1,0 +1,66 @@
+initial_load:
+  include:
+    - path: "/home/keyao/cloudcli/FileLine/data/const_freq/*.log"
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+
+  - processor: filter_by_condition
+    inputs: parsed
+    output: filtered
+    params:
+      filter_expression: "step > total_steps - 10"
+
+  - processor: plot_grouped_bar
+    inputs: filtered
+    output: throughput
+    params:
+      figsize: [40, 8]
+      main_group_col: "ckpt_freq"
+      sub_group_col: "ckpt_type"
+      col_col: "model_name"
+      value_col: "tokens_per_sec"
+      title: "Throughput-Const-Frequency-1x3-Example"
+      xlabel: "Checkpoints Engine Type"
+      yticks_num: 5
+      ylabel: "Throughput (Tokens/s)"
+      grid: False
+      show_main_group_separators: True
+
+      subplot_title_y: -0.12
+      figure_top_margin: 0.87
+      legend_loc: "upper center"
+      legend_bbox_to_anchor: [0.5, 0.96]
+      legend_ncol: 4
+      legend_frameon: False
+
+      title_fontfamily: "Times New Roman"
+      xlabel_fontfamily: "Times New Roman"
+      ylabel_fontfamily: "Times New Roman"
+      xticks_fontfamily: "Times New Roman"
+      yticks_fontfamily: "Times New Roman"
+      subplot_title_fontfamily: "Times New Roman"
+      legend_fontfamily: "Times New Roman"
+
+      aggregate_func: "max"
+
+      sub_group_order:
+        - "deepspeed"
+        - "torch_dcp"
+        - "torch_snapshot"
+        - "torch_dcp_async"
+        - "dlrover_flash"
+        - "datastates_llm"
+        - "py_async"
+        - "cpp_overlap"
+        - "grad"
+        - "half_zero"
+        - "ideal"
+
+final_output:
+  - name: throughput
+    export: test8.pdf

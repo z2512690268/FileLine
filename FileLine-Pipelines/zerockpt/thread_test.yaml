@@ -1,0 +1,64 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/best_params/*.log"  # 使用*和**匹配子目录
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_full_stall_to_callback
+    inputs: initial
+    output: parsed
+
+  # --- 使用您自己的 groupby_table 处理器 ---
+  - processor: groupby_table
+    inputs: parsed
+    output: mean
+    params:
+      # 分组的键，对应 group_keys 参数
+      group_keys: 
+        - "thread_num"
+      # 聚合操作，对应 aggregations 参数
+      # 格式为: { "要聚合的列": "聚合函数" }
+      aggregations:
+        interval_s: "mean"
+
+  - processor: type_cast
+    inputs: mean
+    output: mean1
+    params:
+      # 将 thread_num 列转换为字符串类型
+      type_map:
+        thread_num_: "str"
+
+  - processor: plot_line_categorical 
+    inputs: mean1
+    output: plot_thread
+    params:
+      # 2. 参数重命名并修正列名
+      x_col: "thread_num_" 
+      value_col: "interval_s_mean"
+      
+      # 3. (推荐) 增加新参数以优化绘图效果
+      marker: 'o' # 在每个数据点上添加一个圆点标记
+      x_order: ["1", "2", "4", "8", "16", "32"] # 确保X轴按数值顺序而不是字符串顺序排列 (请根据您的实际线程数修改)
+
+      # 4. 标题和坐标轴标签保持不变
+      title: ""
+      xlabel: "Thread Number"
+      ylabel: "Update Time (s)"
+      yticks_num: 5
+      show_legend: False
+      xlabel_fontfamily: "Times New Roman"
+      ylabel_fontfamily: "Times New Roman"
+      xticks_fontfamily: "Times New Roman"
+      yticks_fontfamily: "Times New Roman"
+      figsize: [10, 4]
+      xlabel_fontsize: 26
+      ylabel_fontsize: 26
+      xticks_fontsize: 22
+      yticks_fontsize: 22
+final_output:
+  - name: plot_thread
+    export: update_time.pdf
+  # - name: mean1
+  #   export: parse_full_stall_to_callback.parquet

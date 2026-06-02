@@ -1,0 +1,39 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/throughput_std/*.log"  # 使用**匹配子目录
+  type: raw
+  global_tags: []
+
+steps:
+  - processor: parse_multi_runtime
+    inputs: initial
+    output: parsed
+
+  - processor: filter_runtime
+    inputs: parsed
+    output: filtered
+    params:
+      type: "throughput_std"
+
+  - processor: plot_grouped_bar
+    inputs: filtered
+    output: throughput_token_batch
+    params:
+      main_group_col: "tokens_num"
+      sub_group_col: "batch_size"
+      value_col: "Token_per_sec"
+      title: "Throughput Group Bar Chart"
+      xlabel: "Single Batch Tokens Number"
+      ylabel: "Throughput (Tok/s)"
+      main_group_gap: 0.5
+      grid: False
+      ylim: [0, 1300]
+      yticks_num: 6
+      # xticks_num: 10
+      legend_loc: "upper left"
+      show_main_group_separators: True
+      sub_group_labels: {1: "batch_size=1", 2: "batch_size=2", 3: "batch_size=3", 4: "batch_size=4"}
+
+final_output: 
+  - name: throughput_token_batch
+    export: throughput_token_batch.pdf

@@ -1,0 +1,27 @@
+initial_load:
+  include:
+    - path: "/home/keyao/cloudcli/FileLine/data/fmrl/convergence.csv"
+  type: raw
+
+steps:
+  - processor: plot_line
+    inputs: initial
+    output: convergence
+    params:
+      time_col: "iteration"
+      value_col: "reward"
+      tag_col: "method"
+      figsize: [5, 3.5]
+      title: "Training Convergence"
+      xlabel: "Iteration"
+      ylabel: "Average Reward"
+      grid: true
+      dpi: 300
+      legend_loc: "lower right"
+      tag_colors:
+        Sequential: "#BDBDBD"
+        AIDE-RL: "#1565C0"
+
+final_output:
+  - name: convergence
+    export: convergence.pdf

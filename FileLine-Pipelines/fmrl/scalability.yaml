@@ -1,0 +1,27 @@
+initial_load:
+  include:
+    - path: "/home/keyao/cloudcli/FileLine/data/fmrl/scalability.csv"
+  type: raw
+
+steps:
+  - processor: plot_line
+    inputs: initial
+    output: scalability
+    params:
+      time_col: "num_tasks"
+      value_col: "throughput"
+      tag_col: "method"
+      figsize: [5, 3.5]
+      title: "Scalability with Number of Tasks"
+      xlabel: "Number of concurrent tasks"
+      ylabel: "Aggregate throughput"
+      grid: true
+      dpi: 300
+      legend_loc: "upper left"
+      tag_colors:
+        Sequential: "#BDBDBD"
+        AIDE-RL: "#1565C0"
+
+final_output:
+  - name: scalability
+    export: scalability.pdf

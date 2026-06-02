@@ -1,0 +1,118 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/const_freq/*.log"  # 使用*和**匹配子目录
+    # - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/const_freq/Opt-py_async-2000-50-1-512-True.log"
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+  
+  - processor: filter_table
+    inputs: parsed
+    output: filtered
+    params:
+      conditions:
+        record_type: in ["Full Stall"]
+        ckpt_freq: in [50]
+        # ckpt_type: in ["cpp_overlap", "datastates_llm", "grad", "py_async", "half_zero"]
+        ckpt_type: in ["cpp_overlap", "deepspeed", "grad", "bytecheckpoint"]
+        # ckpt_type: in ["py_async"]
+        # model_name: in ["Llama1B"]
+
+  - processor: plot_grouped_bar
+    inputs: filtered
+    output: stalltime
+    params:
+      figsize: [10,6]
+      main_group_col: "model_name"
+      sub_group_col: "ckpt_type"
+      # col_col: "ckpt_freq"  # 按ckptfreq分列
+      value_col: "stall_duration"
+      title: ""
+      xlabel: "Model Category"
+      ylabel: "Stall Time (s)"
+      grid: False
+      # show_main_group_separators: True
+      ylim: [0, 1.42]
+      yticks_num: 5
+
+      # 顺序
+      # 1. 指定X轴主分组的顺序
+      main_group_order:
+        - "Llama1B"
+        - "Qwen"
+        - "Opt"
+
+      # 2. 指定每个主分组内部的子分组（柱子）的顺序
+      sub_group_order:
+        # - "py_async"
+        - "cpp_overlap"
+        # - "datastates_llm"
+        - "grad"
+        # - "half_zero"
+        - "deepspeed"
+        - "bytecheckpoint"
+      
+      main_group_labels:
+        "Llama1B": ${LLAMA}
+        "Qwen": ${QWEN}
+        "Opt": ${OPT}
+      
+      sub_group_labels:
+        # "py_async": ${PY_ASYNC}
+        "cpp_overlap": ${CPP_OVERLAP}
+        "grad": ${GRAD}
+        # "half_zero": ${HALF_ZERO}
+        # "datastates_llm": ${DATASTATES_LLM}
+        "deepspeed": ${DEEPSPEED}
+        "bytecheckpoint": ${BYTECHECKPOINT}
+
+      colors:
+        # "py_async": ${PY_ASYNC_COLOR}
+        "cpp_overlap": ${CPP_OVERLAP_COLOR}
+        # "datastates_llm": ${DATASTATES_LLM_COLOR}
+        "grad": ${GRAD_COLOR}
+        # "half_zero": ${HALF_ZERO_COLOR}
+        "deepspeed": ${DEEPSPEED_COLOR}
+        "bytecheckpoint": ${BYTECHECKPOINT_COLOR}
+      legend_edgecolor: "#3c3b3bff"  # 图例边框颜色
+      # --- 布局和样式优化 (核心修改部分) ---
+
+      # legend_loc: "lower center"
+      # legend_bbox_to_anchor: [0.5, 1] # 使用 [0.5, Y] 来垂直移动，Y值小于1
+      legend_ncol: 2 # 保持横向排列
+      # legend_frameon: False # 可以去掉图例边框，让它更清爽
+
+      # 字体配置：全局改为Times New Roman
+      title_fontfamily: "Times New Roman"       # 总标题字体
+      xlabel_fontfamily: "Times New Roman"      # x轴标签字体
+      ylabel_fontfamily: "Times New Roman"      # y轴标签字体
+      xticks_fontfamily: "Times New Roman"      # x轴刻度字体
+      yticks_fontfamily: "Times New Roman"      # y轴刻度字体
+      subplot_title_fontfamily: "Times New Roman"  # 子图标题字体
+      legend_fontfamily: "Times New Roman"      # 图例字体
+
+      # --- 启用并配置柱顶数值显示 ---
+      show_bar_values: True
+      bar_value_format: '{:.3f}'   # 显示三位小数
+      bar_value_fontsize: 12       # 字体大小设为12
+      bar_value_rotation: 0        # 显示角度
+
+      bar_width: 0.3
+      main_group_gap: 0.1
+      sub_group_gap: 0.01
+      xlabel_pad: 10
+
+      legend_fontsize: 21
+      xlabel_fontsize: 26
+      ylabel_fontsize: 25
+      xticks_fontsize: 21
+      yticks_fontsize: 21
+      bar_value_fontsize: 18.5
+
+final_output:
+  - name: stalltime
+    export: stalltime_eg2.pdf

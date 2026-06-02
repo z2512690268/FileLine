@@ -1,0 +1,36 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/const_freq/Llama*.log"  # 使用*和**匹配子目录
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+  
+  - processor: filter_table
+    inputs: parsed
+    output: filtered
+    params:
+      conditions:
+        record_type: in ["Full Stall"]
+        model_name: in ["Llama1B"]
+
+  - processor: plot_grouped_bar
+    inputs: parsed
+    output: stalltime
+    params:
+      main_group_col: "ckpt_type"
+      sub_group_col: "ckpt_freq"
+      value_col: "stall_duration"
+      title: "Full Stall Time"
+      xlabel: "ModelName"
+      ylabel: "Stall Time (s)"
+      grid: False
+      ylim: [0, 40]
+      yticks_num: 5
+
+final_output:
+  - name: stalltime
+    export: stalltime_const_freq.pdf

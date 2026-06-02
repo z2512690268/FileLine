@@ -1,0 +1,26 @@
+initial_load:
+  include:
+    - path: "/home/keyao/cloudcli/FileLine/data/fmrl/utilization.csv"
+  type: raw
+
+steps:
+  - processor: plot_grouped_bar
+    inputs: initial
+    output: utilization
+    params:
+      main_group_col: "entity"
+      sub_group_col: "phase"
+      value_col: "pct"
+      figsize: [5, 3.5]
+      title: "GPU Utilization Breakdown"
+      xlabel: ""
+      ylabel: "Percentage (%)"
+      grid: true
+      dpi: 300
+      ylim: [0, 100]
+      legend_loc: "upper right"
+      show_bar_values: false
+
+final_output:
+  - name: utilization
+    export: utilization.pdf

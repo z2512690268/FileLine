@@ -1,0 +1,27 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/expr_manager/test_data/Llama-grad-300-100-1-512-True.log.cpu"  # 使用*和**匹配子目录
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/expr_manager/test_data/Llama-grad-300-100-1-512-True.log"  # 使用*和**匹配子目录
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_cpu
+    inputs: initial
+    output: parsed
+    params:
+      time_from_start: True
+
+  - processor: plot_line
+    inputs: parsed
+    output: plot_cpu
+    params:
+      time_col: time_from_start
+      value_col: cpu_usage
+      title: "CPU Usage"
+      xlabel: "Time (s)"
+      ylabel: "CPU Usage (%)"
+
+final_output:
+  - name: plot_cpu
+    export: plot_cpu.pdf

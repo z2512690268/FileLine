@@ -1,0 +1,66 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/crash_best_freq/*.log"
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+  
+  - processor: filter_by_condition
+    inputs: parsed
+    output: filtered
+    params:
+      # 自定义定义过滤条件
+      filter_expression: "record_type == 'Step' & step > step.max() - 8"  # P.S. step > step.max() - 10 is OK
+
+  # 非常奇怪的特性：在pandas中，转化成str就是变成object
+  # - processor: type_cast
+  #   inputs: filtered
+  #   output: typed
+  #   params:
+  #     type_map:
+  #       ckpt_type: "str" # 强制将 ckpt_type 列转为字符串
+  #       ckpt_freq: "str"  # 确保 ckpt_freq 列为整数
+
+  - processor: update_universal
+    inputs: filtered
+    output: renamed
+    params:
+      condition: "ckpt_type == 'deepspeed' or True" # 居然不能只用 True
+      target_col: "ckpt_type"
+      action: "format"
+      f_string: "{ckpt_type}, {ckpt_freq}"
+
+  - processor: plot_bar
+    inputs: renamed
+    output: crash_throughput
+    params:
+      # 数据
+      x_col: "ckpt_type"
+      value_col: "tokens_per_sec" # throughput
+      aggregate_func: "max"  # 取最大值
+
+      # 样式
+      figsize: [8, 3]
+      title: "Crash Exp Throughput"
+      xlabel: "Checkpoint Type"
+      yticks_num: 5
+      ylabel: "Throughput (Tokens/s)"
+      grid: False
+      # ylim: [0, 2800]
+
+      # 字体配置：全局改为Times New Roman
+      title_fontfamily: "Times New Roman"       # 总标题字体
+      xlabel_fontfamily: "Times New Roman"      # x轴标签字体
+      ylabel_fontfamily: "Times New Roman"      # y轴标签字体
+      xticks_fontfamily: "Times New Roman"      # x轴刻度字体
+      yticks_fontfamily: "Times New Roman"      # y轴刻度字体
+
+      
+
+final_output:
+  - name: crash_throughput
+    export: crash_test.pdf

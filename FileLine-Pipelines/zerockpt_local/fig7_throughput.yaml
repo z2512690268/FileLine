@@ -1,0 +1,130 @@
+initial_load:
+  include:
+    - path: "/home/keyao/cloudcli/FileLine/data/const_freq/*.log"
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+
+  - processor: filter_table
+    inputs: parsed
+    output: filtered1
+    params:
+      conditions:
+        ckpt_freq: in [50, 200]
+
+  - processor: filter_by_condition
+    inputs: filtered1
+    output: filtered2
+    params:
+      filter_expression: "step > total_steps - 8"
+
+  - processor: plot_grouped_bar
+    inputs: filtered2
+    output: throughput
+    params:
+      main_group_col: "ckpt_freq"
+      sub_group_col: "ckpt_type"
+      col_col: "model_name"
+      value_col: "tokens_per_sec"
+      title: ""
+      xlabel: "Checkpoint Frequency"
+      yticks_num: 5
+      ylabel: "Throughput (Tokens/s)"
+      grid: False
+      show_main_group_separators: True
+
+      legend_loc: "lower center"
+      legend_bbox_to_anchor: [0.5, 0.92]
+      legend_ncol: 6
+      legend_frameon: False
+
+      col_order:
+        - "Llama1B"
+
+      sub_group_order:
+        - "deepspeed"
+        - "torch_dcp"
+        - "torch_snapshot"
+        - "torch_dcp_async"
+        - "bytecheckpoint"
+        - "dlrover_flash"
+        - "datastates_llm"
+        - "py_async"
+        - "cpp_overlap"
+        - "grad"
+        - "half_zero"
+        - "ideal"
+
+      colors:
+        deepspeed:       ${DEEPSPEED_COLOR}
+        torch_dcp:       ${TORCH_DCP_COLOR}
+        bytecheckpoint:  ${BYTECHECKPOINT_COLOR}
+        torch_snapshot:  ${TORCH_SNAPSHOT_COLOR}
+        torch_dcp_async: ${TORCH_DCP_ASYNC_COLOR}
+        dlrover_flash:   ${DLROVER_FLASH_COLOR}
+        datastates_llm:  ${DATASTATES_LLM_COLOR}
+        py_async:        ${PY_ASYNC_COLOR}
+        cpp_overlap:     ${CPP_OVERLAP_COLOR}
+        grad:            ${GRAD_COLOR}
+        half_zero:       ${HALF_ZERO_COLOR}
+        ideal:           ${IDEAL_COLOR}
+
+      sub_group_labels:
+        deepspeed: ${DEEPSPEED}
+        torch_dcp: ${TORCH_DCP}
+        bytecheckpoint: ${BYTECHECKPOINT}
+        torch_snapshot: ${TORCH_SNAPSHOT}
+        torch_dcp_async: ${TORCH_DCP_ASYNC}
+        dlrover_flash: ${DLROVER_FLASH}
+        datastates_llm: ${DATASTATES_LLM}
+        ideal: ${IDEAL}
+        grad: ${GRAD}
+        half_zero: ${HALF_ZERO}
+        py_async: ${PY_ASYNC}
+        cpp_overlap: ${CPP_OVERLAP}
+
+      title_fontfamily: "Times New Roman"
+      xlabel_fontfamily: "Times New Roman"
+      ylabel_fontfamily: "Times New Roman"
+      xticks_fontfamily: "Times New Roman"
+      yticks_fontfamily: "Times New Roman"
+      subplot_title_fontfamily: "Times New Roman"
+      legend_fontfamily: "Times New Roman"
+
+      aggregate_func: "max"
+
+      show_bar_values: True
+      bar_value_format: '{:.0f}'
+      bar_value_fontsize: 12
+      bar_value_rotation: 90
+
+      bar_width: 0.5
+      main_group_gap: 0.1
+      sub_group_gap: 0.01
+
+      show_subplot_titles: True
+
+      subplot_titles:
+        "Llama1B": "(a) LLaMA3.2-1B"
+
+      figsize: [18, 5]
+      xlabel_pad: 0
+      subplot_title_y: -0.31
+      ylim:
+        "Llama1B": [0, 11500]
+
+      legend_fontsize: 20
+      xlabel_fontsize: 20
+      ylabel_fontsize: 24
+      xticks_fontsize: 16
+      yticks_fontsize: 16
+      subplot_title_fontsize: 24
+      bar_value_fontsize: 16
+
+final_output:
+  - name: throughput
+    export: throughput_fig7.pdf

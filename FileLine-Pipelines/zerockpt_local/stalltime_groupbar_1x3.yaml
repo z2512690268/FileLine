@@ -1,0 +1,53 @@
+initial_load:
+  include:
+    - path: "/home/keyao/cloudcli/FileLine/data/const_freq/*.log"
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+
+  - processor: filter_table
+    inputs: parsed
+    output: filtered
+    params:
+      conditions:
+        record_type: in ["Full Stall"]
+        model_name: in ["Llama1B"]
+
+  - processor: plot_grouped_bar
+    inputs: parsed
+    output: stalltime
+    params:
+      figsize: [40,6]
+      main_group_col: "ckpt_type"
+      sub_group_col: "ckpt_freq"
+      col_col: "model_name"
+      value_col: "stall_duration"
+      title: "Full Stall Time"
+      xlabel: "Ckpt Type"
+      ylabel: "Stall Time (s)"
+      grid: False
+      ylim: [0, 40]
+      yticks_num: 5
+
+      subplot_title_y: -0.15
+      figure_top_margin: 0.895
+      legend_loc: "upper center"
+      legend_bbox_to_anchor: [0.5, 0.96]
+      legend_ncol: 4
+      legend_frameon: False
+
+      title_fontfamily: "Times New Roman"
+      xlabel_fontfamily: "Times New Roman"
+      ylabel_fontfamily: "Times New Roman"
+      xticks_fontfamily: "Times New Roman"
+      yticks_fontfamily: "Times New Roman"
+      subplot_title_fontfamily: "Times New Roman"
+      legend_fontfamily: "Times New Roman"
+
+final_output:
+  - name: stalltime
+    export: stalltime_1x3.pdf

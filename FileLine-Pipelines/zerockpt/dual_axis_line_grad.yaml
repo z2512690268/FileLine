@@ -1,0 +1,90 @@
+# 完整的流水线配置 (pipeline.yaml)
+
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/system/Llama-grad-300-100-1-512-True.log.cpu"
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/system/Llama-grad-300-100-1-512-True.log.gpumon"
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/system/Llama-grad-300-100-1-512-True.log"
+    # - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/system/Llama-half_zero-300-100-1-512-True.log.cpu"
+    # - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/system/Llama-half_zero-300-100-1-512-True.log.gpumon"
+    # - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/system/Llama-half_zero-300-100-1-512-True.log"
+
+  type: raw
+
+steps:
+  # -------------------- 解析阶段 --------------------
+  # 步骤 1: 单独解析CPU日志
+  - processor: parse_cpu
+    inputs: initial # 从所有加载的文件中，parse_cpu内部逻辑会只挑选.cpu文件
+    output: parsed_cpu_data
+    params:
+      time_from_start: True
+    # force_rerun: True
+
+  - processor: parse_gpu # 假设的GPU解析器
+    inputs: initial
+    output: parsed_gpu_data
+    params:
+      time_from_start: True
+    # force_rerun: True
+
+  # -------------------- 合并阶段 --------------------
+  # 步骤 3: 使用新的合并组件，将CPU和GPU数据按时间对齐
+  - processor: merge_tables
+    inputs: 
+      - parsed_cpu_data
+      - parsed_gpu_data
+    output: merged_metrics
+    params:
+      on_col: "time_from_start"
+  # -------------------- 绘图阶段 --------------------
+  # 步骤 4: 使用双Y轴绘图组件，输入为合并后的宽表
+  - processor: plot_dual_axis_line
+    inputs: merged_metrics
+    output: cpu_vs_gpu_plot
+    params:
+      figsize: [10, 4]
+      time_col: "time_from_start"
+      # 左轴画CPU使用率
+      value_cols_y1: ["cpu_usage"]
+      # 右轴画GPU显存使用率
+      value_cols_y2: ["tx_pci"] # 假设parse_gpu生成了这个列
+
+      title: ""
+      xlabel: "Time (seconds)"
+      ylabel_y1: "CPU Usage (%)"
+      ylabel_y2: "PCIe Bandwidth (MB/s)"
+      ylabel_color_y1: "black"
+      ylabel_color_y2: "black"
+
+      yticks_num_y1: 5
+      yticks_num_y2: 5
+      ylim_y1: [0, 1800]  # CPU使用率范围
+      ylim_y2: [-400, 17000]  # TX PCI范围
+
+      xlabel_fontfamily: "Times New Roman"
+      ylabel_fontfamily: "Times New Roman"
+      xticks_fontfamily: "Times New Roman"
+      yticks_fontfamily: "Times New Roman"
+      legend_fontfamily: "Times New Roman"
+
+      legend_loc: "lower center"
+      legend_bbox_to_anchor: [0.5, 1]
+      legend_ncol: 2
+      legend_frameon: False
+      # grid: False
+
+      # font size
+      xlabel_fontsize: 28
+      ylabel_fontsize: 26
+      xticks_fontsize: 22
+      yticks_fontsize: 22
+      legend_fontsize: 26
+
+      legend_label_1: "CPU Usage"
+      legend_label_2: "GPU-CPU Transfer"
+      
+
+final_output:
+  - name: cpu_vs_gpu_plot
+    export: dual_axis_cpu_gpu_grad.pdf

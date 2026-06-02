@@ -1,0 +1,23 @@
+initial_load:
+  include:
+    - path: "/home/keyao/cloudcli/FileLine/data/fmrl/cdf_n_tokens.csv"
+  type: raw
+
+steps:
+  - processor: plot_line
+    inputs: initial
+    output: cdf_curve
+    params:
+      time_col: "n_tokens"
+      value_col: "cdf_pct"
+      figsize: [7, 4.5]
+      title: "CDF of Per-Request Generated Token Count"
+      xlabel: "Generated tokens per request"
+      ylabel: "Cumulative percentage (%)"
+      ylim: [0, 100]
+      grid: true
+      dpi: 300
+
+final_output:
+  - name: cdf_curve
+    export: cdf_curve.pdf

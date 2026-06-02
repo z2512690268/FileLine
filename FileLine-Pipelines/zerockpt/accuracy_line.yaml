@@ -1,0 +1,122 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/accuracy_expr/Llama-grad-100-50-after.log" 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/accuracy_expr/Llama-grad-100-50-before.log"  # 使用**匹配子目录
+  type: raw
+  global_tags: []
+
+steps:
+  - processor: parse_multi_runtime
+    inputs: initial
+    output: parsed
+    params:
+      version: "merge"
+
+  - processor: filter_accuracy_line
+    inputs: parsed
+    output: filtered
+
+  - processor: filter_table
+    inputs: filtered
+    output: step_filtered
+    params:
+      conditions: "step >= 40 and step <= 70"
+
+  - processor: add_columns
+    inputs: step_filtered
+    output: data_with_checkpoints
+    params:
+      new_columns:
+        checkpoint_start_point: "step % 50 == 0"  # 当step是50的倍数时值为True，否则为False
+      overwrite: true
+
+  - processor: plot_line
+    inputs: data_with_checkpoints
+    output: loss_curve
+    params:
+      figsize: [10, 4]
+      time_col: "step"
+      value_col: "loss"
+      tag_col: "tag"
+      title: ""
+      xlabel: "Steps"
+      ylabel: "Loss"
+      tag_line_styles: {"before": "dashed", "after": "solid"}
+      legend_labels: {"before": "WithoutCkpt", "after": "GradCkpt"}
+      legend_order:
+        - before
+        - after
+      grid: False
+      ylim: [1.73, 2.02]
+      xlim: [40, 70]
+      yticks_num: 5
+      xticks_num: 7
+      legend_loc: "lower center"
+      legend_bbox_to_anchor: [0.5, 1.001]
+      legend_ncol: 2
+      global_font_family: "Times New Roman"
+      legend_frameon: False
+
+      title_fontfamily: "Times New Roman"       # 总标题字体
+      xlabel_fontfamily: "Times New Roman"      # x轴标签字体
+      ylabel_fontfamily: "Times New Roman"      # y轴标签字体
+      xticks_fontfamily: "Times New Roman"      # x轴刻度字体
+      yticks_fontfamily: "Times New Roman"      # y轴刻度字体
+      legend_fontfamily: "Times New Roman"      # 图例字体
+
+      legend_fontsize: 21
+      xlabel_fontsize: 26
+      ylabel_fontsize: 25
+      xticks_fontsize: 21
+      yticks_fontsize: 21
+      annotations:
+        - marker_col: "restart_point"  # 假设您的数据中标识恢复点的列名为"restart_point"
+          text: "Restore"  # 原先的annotation_text
+          fontsize: 21  # 原先的annotation_fontsize
+          offset_ratio: 0.2  # 原先的annotation_offset_ratio
+          vertical_line: True  # 原先的show_restart_vertical_line
+          point: True  # 原先的show_restart_point
+          show_tick: true  # 为这个标注显示x轴刻度
+          arrow_params:  # 原先的arrow_params
+            facecolor: "black"
+            shrinkA: 0
+            shrinkB: 5
+            width: 1.5
+            headwidth: 8
+          vertical_line_params:  # 原先的restart_vertical_line_params
+            linestyle: ":"
+            color: "gray"
+            alpha: 0.8
+            linewidth: 1.4
+          point_params:  # 原先的restart_point_params
+            color: "black"
+            marker: "*"
+            s: 30
+            zorder: 10
+        - marker_col: "checkpoint_start_point"  # 假设您的数据中标识恢复点的列名为"restart_point"
+          text: "Checkpoint"  # 原先的annotation_text
+          fontsize: 21  # 原先的annotation_fontsize
+          offset_ratio: 0.3  # 原先的annotation_offset_ratio
+          vertical_line: True  # 原先的show_restart_vertical_line
+          point: True  # 原先的show_restart_point
+          show_tick: true  # 为这个标注显示x轴刻度
+          arrow_params:  # 原先的arrow_params
+            facecolor: "black"
+            shrinkA: 0
+            shrinkB: 5
+            width: 1.5
+            headwidth: 8
+          vertical_line_params:  # 原先的restart_vertical_line_params
+            linestyle: ":"
+            color: "gray"
+            alpha: 0.8
+            linewidth: 1.4
+          point_params:  # 原先的restart_point_params
+            color: "black"
+            marker: "*"
+            s: 30
+            zorder: 10
+
+final_output: 
+  - name: loss_curve
+    export: loss_curve.pdf

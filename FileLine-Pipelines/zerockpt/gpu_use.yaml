@@ -1,0 +1,33 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/expr_manager/Llama-grad-300-100-1-512-True.log.gpumon"  # 使用*和**匹配子目录
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/expr_manager/Llama-grad-300-100-1-512-True.log"  # 使用*和**匹配子目录
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_gpu
+    inputs: initial
+    output: parsed
+    params:
+      time_from_start: True
+
+  - processor: plot_line
+    inputs: parsed
+    output: plot_gpu
+    params:
+      time_col: time_from_start
+      # value_col: mem_util
+      # value_col: sm_util
+      # value_col: rx_pci
+      value_col: tx_pci
+      title: "GPU Monitor"
+      xlabel: "Time (s)"
+      ylabel: "GPU Memory Usage (%)"
+      # ylabel: "SM Utilization (%)"
+      # ylabel: "RX PCI(MB/s)"
+      ylabel: "TX PCI(MB/s)"
+
+final_output:
+  - name: plot_gpu
+    export: plot_gpu_tx.pdf

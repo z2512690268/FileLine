@@ -1,0 +1,76 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/crash_best_freq/*.log"  #TODO: 添加标识符
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+  
+  # - processor: filter_table
+  #   inputs: parsed
+  #   output: filtered
+  #   params:
+  #     conditions:
+  #       record_type: in ["Full Stall"]
+  #       model_name: in ["Llama1B"]
+
+  - processor: filter_by_condition
+    inputs: parsed
+    output: filtered
+    params:
+      # 自定义定义过滤条件
+      filter_expression: "record_type == 'Step' & step > step.max() - 8"  # P.S. step > step.max() - 10 is OK
+
+  - processor: plot_grouped_bar
+    inputs: filtered
+    output: throughput
+    params:
+      # figsize: [40,6]
+      figsize: [12, 6]
+      main_group_col: "ckpt_type"
+      sub_group_col: "crash_freq"
+      col_col: "model_name"  # 按模型名称分列
+      value_col: "tokens_per_sec" # throughput
+      title: "Crash Exp Throughput"
+      xlabel: "ckpt type"
+      yticks_num: 5
+      ylabel: "Throughput (Tokens/s)"
+      grid: False
+      # ylim: [0, 2800]
+
+
+      # --- 布局 ---
+      # 1. 将子图标题移动到下方
+      #    - y < 0 会将标题移动到X轴下方。具体数值需要微调。
+      #    - -0.3 通常是一个比较合适的值，可以根据字体大小调整。
+      subplot_title_y: -0.15
+      # subplot_title_fontsize: 12
+
+      # 2. 解决图例与总标题重叠问题
+      #    - 首先，为顶部留出更多空间。默认是0.92，我们减小它。
+      #    - 0.90 表示子图区域的顶部边界在Figure高度的90%处，
+      #      给上面的15%空间留给图例和总标题。
+      figure_top_margin: 0.895
+      legend_loc: "upper center"
+      legend_bbox_to_anchor: [0.5, 0.96] # 使用 [0.5, Y] 来垂直移动，Y值小于1
+      legend_ncol: 4 # 保持横向排列
+      legend_frameon: False # 可以去掉图例边框，让它更清爽
+
+      # 字体配置：全局改为Times New Roman
+      title_fontfamily: "Times New Roman"       # 总标题字体
+      xlabel_fontfamily: "Times New Roman"      # x轴标签字体
+      ylabel_fontfamily: "Times New Roman"      # y轴标签字体
+      xticks_fontfamily: "Times New Roman"      # x轴刻度字体
+      yticks_fontfamily: "Times New Roman"      # y轴刻度字体
+      subplot_title_fontfamily: "Times New Roman"  # 子图标题字体
+      legend_fontfamily: "Times New Roman"      # 图例字体
+
+      # 聚合函数
+      aggregate_func: "max"  # 取最大值
+
+final_output:
+  - name: throughput
+    export: crash_test.pdf

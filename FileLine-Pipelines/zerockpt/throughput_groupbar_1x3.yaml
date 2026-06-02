@@ -1,0 +1,105 @@
+initial_load:
+  include: 
+    # - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/const_freq/Llama1B-cpp_overlap-2000-50-1-512-True.log"  # 使用*和**匹配子目录
+    # - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/const_freq/Llama1B-deepspeed-2000-50-1-512-True.log"  # 使用*和**匹配子目录
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/const_freq/*.log"
+    # - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/multi_card/Llama8B-cpp_overlap-2000-50-4-512-True.log"
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+  
+  # - processor: filter_table
+  #   inputs: parsed
+  #   output: filtered
+  #   params:
+  #     conditions:
+  #       record_type: in ["Full Stall"]
+  #       model_name: in ["Llama1B"]
+
+  - processor: filter_by_condition
+    inputs: parsed
+    output: filtered
+    params:
+      # 自定义定义过滤条件
+      filter_expression: "step > total_steps - 10"
+
+  - processor: plot_grouped_bar
+    inputs: filtered
+    output: throughput
+    params:
+      # figsize: [40,6]
+      figsize: [40, 8]
+      main_group_col: "ckpt_freq"
+      sub_group_col: "ckpt_type"
+      col_col: "model_name"  # 按模型名称分列
+      value_col: "tokens_per_sec" # throughput
+      title: "Throughput-Const-Frequency-1x3-Example"
+      xlabel: "Checkpoints Engine Type"
+      yticks_num: 5
+      ylabel: "Throughput (Tokens/s)"
+      grid: False
+      show_main_group_separators: True
+      # ylim: [0, 2900]
+
+
+      # --- 布局 ---
+      # 1. 将子图标题移动到下方
+      #    - y < 0 会将标题移动到X轴下方。具体数值需要微调。
+      #    - -0.3 通常是一个比较合适的值，可以根据字体大小调整。
+      subplot_title_y: -0.12
+      # subplot_title_fontsize: 12
+
+      # 2. 解决图例与总标题重叠问题
+      #    - 首先，为顶部留出更多空间。默认是0.92，我们减小它。
+      #    - 0.90 表示子图区域的顶部边界在Figure高度的90%处，
+      #      给上面的15%空间留给图例和总标题。
+      # figure_top_margin: 0.895
+      figure_top_margin: 0.87
+      legend_loc: "upper center"
+      legend_bbox_to_anchor: [0.5, 0.96] # 使用 [0.5, Y] 来垂直移动，Y值小于1
+      legend_ncol: 4 # 保持横向排列
+      legend_frameon: False # 可以去掉图例边框，让它更清爽
+
+      # 字体配置：全局改为Times New Roman
+      title_fontfamily: "Times New Roman"       # 总标题字体
+      xlabel_fontfamily: "Times New Roman"      # x轴标签字体
+      ylabel_fontfamily: "Times New Roman"      # y轴标签字体
+      xticks_fontfamily: "Times New Roman"      # x轴刻度字体
+      yticks_fontfamily: "Times New Roman"      # y轴刻度字体
+      subplot_title_fontfamily: "Times New Roman"  # 子图标题字体
+      legend_fontfamily: "Times New Roman"      # 图例字体
+
+      # 聚合函数
+      aggregate_func: "max"  # 取最大值
+
+      # 顺序
+      sub_group_order:
+        - "deepspeed"
+        - "torch_dcp"
+        - "torch_snapshot"
+        - "torch_dcp_async"
+        - "dlrover_flash"
+        - "datastates_llm"
+        - "py_async"
+        - "cpp_overlap"
+        - "grad"
+        - "half_zero"
+        - "ideal"
+
+      # # --- 新增的归一化配置 ---
+      # normalization:
+      #   enabled: true
+      #   # 定义哪个柱子的高度为 1.0
+      #   reference_conditions:
+      #     ckpt_type: "ideal" # 参照组的主分组
+      #     ckpt_freq: 100      # 参照组的子分组
+      #     model_name: "Llama1B"  # 参照组所在的列（子图）
+
+
+final_output:
+  - name: throughput
+    export: test8.pdf

@@ -1,0 +1,89 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/scripts/data/const_freq/*.log"  # 使用*和**匹配子目录
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_multi_stalltime_with_timestamp
+    inputs: initial
+    output: parsed
+  
+  - processor: filter_table
+    inputs: parsed
+    output: filtered
+    params:
+      conditions:
+        record_type: in ["Full Stall"]
+        ckpt_freq: in [50, 200]
+        ckpt_type: in ["cpp_overlap", "datastates_llm", "grad", "py_async", "half_zero"]
+        # model_name: in ["Llama1B"]
+
+  - processor: plot_grouped_bar
+    inputs: filtered
+    output: stalltime
+    params:
+      figsize: [20,6]
+      main_group_col: "model_name"
+      sub_group_col: "ckpt_type"
+      col_col: "ckpt_freq"  # 按模型名称分列
+      value_col: "stall_duration"
+      title: ""
+      xlabel: "Model Category"
+      ylabel: "Stall Time (s)"
+      grid: False
+      show_main_group_separators: True
+      ylim: [0, 1.4]
+      yticks_num: 5
+
+      # 顺序
+      # 1. 指定X轴主分组的顺序
+      main_group_order:
+        - "Llama1B"
+        - "Qwen"
+        - "Opt"
+
+      # 2. 指定每个主分组内部的子分组（柱子）的顺序
+      sub_group_order:
+        - "py_async"
+        - "cpp_overlap"
+        - "datastates_llm"
+        - "grad"
+        - "half_zero"
+
+      # --- 布局和样式优化 (核心修改部分) ---
+
+      # 1. 将子图标题移动到下方
+      #    - y < 0 会将标题移动到X轴下方。具体数值需要微调。
+      #    - -0.3 通常是一个比较合适的值，可以根据字体大小调整。
+      subplot_title_y: -0.15
+      # subplot_title_fontsize: 12
+
+      # 2. 解决图例与总标题重叠问题
+      #    - 首先，为顶部留出更多空间。默认是0.92，我们减小它。
+      #    - 0.85 表示子图区域的顶部边界在Figure高度的85%处，
+      #      给上面的15%空间留给图例和总标题。
+      figure_top_margin: 0.89
+
+      #    - 然后，精确定位图例。
+      #    - 'upper center' 表示水平居中对齐。
+      #    - bbox_to_anchor 的 (0.5, 0.96) 表示将图例的 'upper center' 定位点
+      #      放置在 Figure 坐标系的 (50%, 96%) 位置。
+      #      这样图例就会紧贴在总标题下方。
+      legend_loc: "upper center"
+      legend_bbox_to_anchor: [0.5, 0.95] # 使用 [0.5, Y] 来垂直移动，Y值小于1
+      legend_ncol: 5 # 保持横向排列
+      legend_frameon: False # 可以去掉图例边框，让它更清爽
+
+      # 字体配置：全局改为Times New Roman
+      title_fontfamily: "Times New Roman"       # 总标题字体
+      xlabel_fontfamily: "Times New Roman"      # x轴标签字体
+      ylabel_fontfamily: "Times New Roman"      # y轴标签字体
+      xticks_fontfamily: "Times New Roman"      # x轴刻度字体
+      yticks_fontfamily: "Times New Roman"      # y轴刻度字体
+      subplot_title_fontfamily: "Times New Roman"  # 子图标题字体
+      legend_fontfamily: "Times New Roman"      # 图例字体
+
+final_output:
+  - name: stalltime
+    export: stalltime_eg1.pdf

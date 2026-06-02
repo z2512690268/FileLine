@@ -1,0 +1,32 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/expr_manager/dummy"  # 使用**匹配子目录
+  type: raw
+  global_tags: []
+
+steps:
+  - processor: generate_gockpt_overhead
+    inputs: initial
+    output: generated
+
+  - processor: plot_loss_curve
+    inputs: generated
+    output: grad_overhead_curve
+    params:
+      time_col: "x"
+      loss_col: "y"
+      tag_col: "solution"
+      title: "Checkpoint Overhead Curve"
+      xlabel: "Origin T_ckpt(*T_step)"
+      ylabel: "Stall Time(*T_step)"
+      # tag_line_styles: {"before": "dashed", "after": "solid"}
+      grid: False
+      xlim: [0, 10.5]
+      ylim: [0, 10.5]
+      yticks_num: 6
+      # xticks_num: 10
+      legend_loc: "upper left"
+
+final_output: 
+  - name: grad_overhead_curve
+    export: grad_overhead_curve.pdf

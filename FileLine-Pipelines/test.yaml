@@ -1,0 +1,21 @@
+initial_load:
+  include: 
+    - path: "/root/keyao/Checkpoints/ZeroCkpt/ZeroCkpt2/test/pytest/test.log"  # 使用**匹配子目录
+  type: raw
+  global_tags: [origin]
+
+steps:
+  - processor: parse_runtime
+    inputs: initial
+    output: parsed
+    # force_rerun: True
+    # cache: False
+
+  - processor: csv_multiplier
+    inputs: parsed
+    output: multiplied
+    params:
+      multiplier: 2.0
+
+final_output: 
+  - name: multiplied

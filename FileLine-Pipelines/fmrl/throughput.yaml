@@ -1,0 +1,34 @@
+initial_load:
+  include:
+    - path: "/home/keyao/cloudcli/FileLine/data/fmrl/throughput.csv"
+  type: raw
+
+steps:
+  - processor: plot_grouped_bar
+    inputs: initial
+    output: throughput
+    params:
+      main_group_col: "config"
+      sub_group_col: "method"
+      value_col: "throughput"
+      figsize: [5, 3.5]
+      title: "End-to-End Training Throughput"
+      xlabel: "Configuration"
+      ylabel: "Normalized Throughput"
+      grid: true
+      dpi: 300
+      colors:
+        Sequential: "#BDBDBD"
+        Blocking: "#90A4AE"
+        AIDE-RL: "#1565C0"
+      sub_group_order: ["Sequential", "Blocking", "AIDE-RL"]
+      main_group_labels:
+        Small: "Small (2 GPU)"
+        Large: "Large (4 GPU)"
+      legend_loc: "upper left"
+      ylim: [0, 2.8]
+      show_bar_values: true
+
+final_output:
+  - name: throughput
+    export: throughput.pdf

@@ -1,0 +1,29 @@
+initial_load:
+  include:
+    - path: "/home/keyao/cloudcli/FileLine/data/fmrl/overhead.csv"
+  type: raw
+
+steps:
+  - processor: plot_grouped_bar
+    inputs: initial
+    output: overhead
+    params:
+      main_group_col: "operation"
+      sub_group_col: "model"
+      value_col: "cost_ms"
+      figsize: [5, 3.5]
+      title: "Entity Interface Overhead"
+      xlabel: "Operation"
+      ylabel: "Latency (ms, log scale)"
+      grid: true
+      dpi: 300
+      colors:
+        "0.5B": "#81C784"
+        "7B": "#1565C0"
+      sub_group_order: ["0.5B", "7B"]
+      legend_loc: "upper left"
+      show_bar_values: true
+
+final_output:
+  - name: overhead
+    export: overhead.pdf
