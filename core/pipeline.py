@@ -1,5 +1,7 @@
 # core/pipeline.py
 import click
+import subprocess
+import tempfile
 from pathlib import Path
 from .base import experiment_manager
 from typing import List, Dict, Union, Set
@@ -37,6 +39,7 @@ class IncludeSpec:
     re_pattern: Optional[str] = None   # 针对该模式的正则表达式
     tags: Optional[List[str]] = None   # 该模式独有的标签
     source: str = "initial"            # 输出到 pipeline 的变量名 (默认 initial)
+    remote: Optional[str] = None       # 远程拉取: "user@host:port:/path" (默认端口22)
     sort_by: Optional[str] = None      # 排序: name_asc/name_desc/mtime/mtime_asc
     sort_key: Optional[str] = None     # 提取排序键的 regex (如 "(\\d{8})" 取日期)
     limit: Optional[int] = None        # 取前 N 个 (与 sort_by/sort_key 配合)
@@ -252,9 +255,54 @@ class PipelineRunner:
         """获取文件修改时间（UTC时间戳）"""
         return os.path.getmtime(file_path)
 
+    def _sync_remote(self, spec: IncludeSpec, debug: bool = False) -> str:
+        """将远程目录 rsync 到本地缓存, 返回本地路径"""
+        if not spec.remote:
+            return spec.path
+        # 解析 remote 格式: "user@host:port:/path" 或 "user@host:/path"
+        import re as _re
+        m = _re.match(r"(\S+)@(\S+):(\d+):(.+)$", spec.remote)
+        if m:
+            user, host, port, rpath = m.group(1), m.group(2), m.group(3), m.group(4)
+        else:
+            m = _re.match(r"(\S+)@(\S+):(.+)$", spec.remote)
+            if not m:
+                raise ValueError(f"无效的 remote 格式: {spec.remote} (应为 user@host:port:/path 或 user@host:/path)")
+            user, host, port, rpath = m.group(1), m.group(2), "22", m.group(3)
+
+        # 本地缓存目录
+        cache_key = hashlib.md5(f"{spec.remote}".encode()).hexdigest()[:12]
+        cache_dir = Path.home() / ".cache" / "fileline" / "remote" / cache_key
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        ssh_cmd = f"ssh -p {port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        remote_src = f"{user}@{host}:{rpath}/" if not rpath.endswith("/") and Path(rpath).suffix == "" else f"{user}@{host}:{rpath}"
+        # 如果远程路径是文件而非目录, 不加尾部斜杠
+        cmd = ["rsync", "-az"]
+        cmd += ["-e", ssh_cmd, remote_src, str(cache_dir) + "/"]
+
+        if debug:
+            click.echo(f"  [remote] {' '.join(cmd)}")
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"rsync 失败: {result.stderr.strip() or '未知错误'}")
+
+        files = list(cache_dir.iterdir())
+        if debug:
+            click.echo(f"  [remote] 同步完成: {len(files)} 个文件 → {cache_dir}")
+
+        return str(cache_dir)
+
     def _load_initial_files(self, config: InitialLoadConfig,
                                 debug: bool = False) -> Dict[str, List[int]]:
         """加载初始文件, 返回 {source_name: [entry_id, ...]}"""
+        # 远程拉取预处理
+        for spec in config.include_patterns:
+            if spec.remote:
+                local_dir = self._sync_remote(spec, debug)
+                spec.path = str(Path(local_dir) / spec.path)
+
         # source_mode=raw: 从 DB 过滤已有数据 (按 original_path 匹配 include 模式)
         exp_config = experiment_manager.get_experiments().get(experiment_manager.current_experiment, {})
         if exp_config.get("source_mode") == "raw":
@@ -400,6 +448,9 @@ class PipelineRunner:
                     entry = self.storage.store_raw_data(file_path, self.session)
                     entry.type = config.data_type
                     entry.description = f"自动加载自: {file_path}"
+                    # 远程文件: original_path 存 remote URI, 便于 source_mode=raw 匹配
+                    if spec.remote:
+                        entry.original_path = f"{spec.remote.rstrip('/')}/{Path(file_path).name}"
                     self.session.flush()
                     self.session.add(FileMTimeCache(
                         file_path=file_path, data_entry_id=entry.id, last_mtime=current_mtime
