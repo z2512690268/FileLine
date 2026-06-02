@@ -244,9 +244,9 @@ def import_cmd(package, name, pipelines_dir):
         (exp_dir / "processed").mkdir(exist_ok=True)
         (exp_dir / "exports").mkdir(exist_ok=True)
 
-        # 解压数据文件
+        # 解压数据文件 (跳过 data.db, 由下面单独处理)
         for m in tar.getmembers():
-            if m.name.startswith("experiment/") and m.isfile():
+            if m.name.startswith("experiment/") and m.isfile() and m.name != "experiment/data.db":
                 rel = "/".join(m.name.split("/")[1:])
                 target = exp_dir / rel
                 target.parent.mkdir(parents=True, exist_ok=True)
