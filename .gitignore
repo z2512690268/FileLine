@@ -27,6 +27,8 @@ experiment_deepspeed/
 .expr_config
 pipelines/
 dummy
+/data/
+/managed_pipelines/
 *.gpumon
 test_data/
 docs/
