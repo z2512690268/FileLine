@@ -197,12 +197,17 @@ def run(config_file, global_config, debug, dry_run):
         snap_pip_dir.mkdir(parents=True, exist_ok=True)
         snap_proc_dir.mkdir(parents=True, exist_ok=True)
 
-        # 复制 pipeline YAML
+        # 复制 pipeline YAML (原样保留, 含 remote)
         import shutil as _sh
         yaml_dst = snap_pip_dir / Path(config_file).name
         _sh.copy2(config_file, yaml_dst)
         if global_config:
             _sh.copy2(global_config, snap_pip_dir / Path(global_config).name)
+        # 设置 source_mode=raw: 后续自动用缓存数据
+        exps = experiment_manager.get_experiments()
+        if exp_name in exps:
+            exps[exp_name]["source_mode"] = "raw"
+            experiment_manager._save_experiments(exps)
 
         # 复制用到的 processor 源文件
         for step in config["steps"]:
