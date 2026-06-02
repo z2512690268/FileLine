@@ -255,22 +255,68 @@ class PipelineRunner:
     def _load_initial_files(self, config: InitialLoadConfig,
                                 debug: bool = False) -> Dict[str, List[int]]:
         """加载初始文件, 返回 {source_name: [entry_id, ...]}"""
-        # source_mode=raw: 直接用 DB 已有的 raw 数据
+        # source_mode=raw: 从 DB 过滤已有数据 (按 original_path 匹配 include 模式)
         exp_config = experiment_manager.get_experiments().get(experiment_manager.current_experiment, {})
         if exp_config.get("source_mode") == "raw":
-            existing = self.session.query(DataEntry).filter(
+            all_raw = self.session.query(DataEntry).filter(
                 DataEntry.type == config.data_type
-            ).order_by(DataEntry.id).all()
-            if existing:
+            ).all()
+            if not all_raw:
+                raise FileNotFoundError("无已有 raw 数据可用")
+            source_buckets: Dict[str, List[DataEntry]] = {}
+            spec_tags: Dict[str, List[str]] = {}
+            for spec in config.include_patterns:
+                matches = []
+                for entry in all_raw:
+                    op = str(entry.original_path) if entry.original_path else ""
+                    # glob 匹配 original_path
+                    if Path(op).match(spec.path) or Path(op).match(f"**/{spec.path}"):
+                        matches.append(entry)
+                # 正则二次过滤
+                if spec.re_pattern and matches:
+                    try:
+                        _re = re.compile(spec.re_pattern)
+                        matches = [m for m in matches if _re.search(str(m.original_path or ""))]
+                    except re.error:
+                        pass
+                # 排序 (按 original_path 的字符串, 或 mtime)
+                if spec.sort_by == "name_desc":
+                    matches.sort(key=lambda e: str(e.original_path or ""), reverse=True)
+                elif spec.sort_by == "mtime":
+                    matches.sort(key=lambda e: e.timestamp or 0, reverse=True)
+                elif spec.sort_by == "mtime_asc":
+                    matches.sort(key=lambda e: e.timestamp or 0)
+                elif spec.sort_key:
+                    try:
+                        _kr = re.compile(spec.sort_key)
+                        matches.sort(key=lambda e: _kr.search(str(e.original_path or "")).group(1) if _kr.search(str(e.original_path or "")) else "", reverse=(spec.sort_by == "name_desc"))
+                    except re.error:
+                        pass
+                if spec.limit is not None and spec.limit > 0:
+                    matches = matches[:spec.limit]
+                src = spec.source
+                source_buckets.setdefault(src, []).extend(matches)
+                spec_tags.setdefault(src, []).extend(spec.tags or [])
+            if not any(v for v in source_buckets.values()):
+                # fallback: 无法匹配时用全部 (兼容旧 YAML 没有特定路径)
+                source_buckets = {"initial": all_raw}
+            result = {}
+            for src, entries in source_buckets.items():
+                ids = []
+                for entry in entries:
+                    for tn in (spec_tags.get(src, []) + (config.tags or [])):
+                        tag = self.session.query(Tag).filter_by(name=tn).first()
+                        if not tag:
+                            tag = Tag(name=tn)
+                            self.session.add(tag)
+                        if tag not in entry.tags:
+                            entry.tags.append(tag)
+                    ids.append(entry.id)
+                result[src] = ids
                 if debug:
-                    click.echo(f"  [source_mode=raw] 复用 {len(existing)} 条已有记录")
-                # 按 source 分组 (默认 initial)
-                result = {"initial": [e.id for e in existing]}
-                if debug:
-                    for e in existing:
-                        click.echo(f"    {e.id}: {e.path}")
-                    print("-------------------------------------------")
-                return result
+                    click.echo(f"  [source_mode=raw] {src}: {len(ids)} 条 (匹配 {len(source_buckets.get(src,[]))})")
+            self.session.commit()
+            return result
 
         source_buckets: Dict[str, List[Path]] = {}
         spec_tags: Dict[str, List[str]] = {}

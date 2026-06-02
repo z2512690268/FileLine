@@ -283,6 +283,12 @@ def import_cmd(package, name, pipelines_dir):
                         (old_abs, new_abs, f"{old_abs}%")
                     )
             conn.commit()
+            # 迁移: 确保 step_cache 有 group_name 列
+            try:
+                conn.execute("ALTER TABLE step_cache ADD COLUMN group_name VARCHAR(64)")
+                conn.commit()
+            except Exception:
+                pass
             conn.close()
 
         # 解压 pipeline 文件 (到实验目录内, 自包含)
