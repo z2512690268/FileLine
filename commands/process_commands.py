@@ -30,7 +30,13 @@ def run(processor_name, input_ids, param):
             input_ids=inputs,
             **params
         )
-        entries = result if isinstance(result, list) else [result]
+        # 扁平化命名多输出的所有结果
+        if isinstance(result, dict):
+            entries = []
+            for group_entries in result.values():
+                entries.extend(group_entries)
+        else:
+            entries = result if isinstance(result, list) else [result]
 
         # 记录操作历史
         for entry in entries:

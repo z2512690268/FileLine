@@ -189,7 +189,14 @@ def run_processor(
             processor = DataProcessor(storage, session)
             result = processor.run(processor_name, input_ids, **params)
             session.commit()
-            entry = result[0] if isinstance(result, list) else result
+            # 扁平化（支持 list/dict 多输出）
+            if isinstance(result, dict):
+                all_entries = [e for g in result.values() for e in g]
+            elif isinstance(result, list):
+                all_entries = result
+            else:
+                all_entries = [result]
+            entry = all_entries[0]
             return {
                 "id": entry.id,
                 "path": str(entry.path),

@@ -19,13 +19,14 @@ from .storage import FileStorage
 
 @dataclass
 class PipelineStep:
-    processor: str           # 注册的处理函数名称
-    inputs: Union[str, List[str]]  # 输入源标识符
-    params: Dict            # 处理参数
-    output_var: str         # 输出变量名
-    cache: str            # 是否使用缓存
-    force_rerun: bool        # 是否强制重新运行
-    export: Optional[str]   # 输出文件导出名(不包括扩展名)
+    processor: str                     # 注册的处理函数名称
+    inputs: Union[str, List[str]]      # 输入源标识符
+    params: Dict                       # 处理参数
+    output_var: str                    # 输出变量名
+    outputs: Optional[Dict[str, str]] = None  # 命名多输出: {group: var}
+    cache: str = True                  # 是否使用缓存
+    force_rerun: bool = False          # 是否强制重新运行
+    export: Optional[str] = None       # 输出文件导出名(不包括扩展名)
 
 @dataclass
 class IncludeSpec:
@@ -64,31 +65,99 @@ class PipelineRunner:
 
             # 检查缓存
             process_desc = ProcessorRegistry.get_processor(step.processor)
+
+            # ── 多输出→单输入 foreach: 对每个输入执行一次, 收集所有结果 ──
+            if process_desc["input_type"] == "single" and len(resolved_ids) > 1:
+                if debug:
+                    print(f"  Foreach x{len(resolved_ids)}: {step.processor} ← {step.inputs}")
+                all_entries = []
+                for rid in resolved_ids:
+                    r = processor.run(processor_name=step.processor, input_ids=rid, **step.params)
+                    inp_entry = self.session.query(DataEntry).get(rid)
+                    # 语义命名 + 标签继承
+                    in_stem = Path(inp_entry.path).stem if inp_entry else str(rid)
+                    outputs = [r] if not isinstance(r, list) else r
+                    for oe in outputs:
+                        src_path = Path(oe.path)
+                        semantic = f"{oe.id}_{in_stem}{src_path.suffix}"
+                        new_path = src_path.parent / semantic
+                        if src_path.exists():
+                            shutil.move(str(src_path), str(new_path))
+                        oe.path = str(new_path)
+                        if inp_entry:
+                            for t in inp_entry.tags:
+                                tag_name = t.name
+                                if tag_name not in {x.name for x in oe.tags}:
+                                    tag = self.session.query(Tag).filter_by(name=tag_name).first()
+                                    if tag:
+                                        oe.tags.append(tag)
+                    all_entries.extend(outputs)
+                entries = all_entries
+                if step.export:
+                    export_path = self.storage.create_export_file(step.export, entries[0].id)
+                    shutil.copy(entries[0].path, export_path)
+                if debug:
+                    for e in entries:
+                        print(f"  Output ID: {e.id}, Path: {e.path}")
+                    print("-------------------------------------------")
+                self.context[step.output_var] = [e.id for e in entries]
+                self._log_step(step, entries[0].id)
+                continue
+
             step_hash = self._generate_step_hash(
                 processor=step.processor,
                 func_hash=process_desc["hash"],
                 input_ids=resolved_ids,
                 params=step.params
             )
-            
-            cached = self.session.query(StepCache).filter(
-                StepCache.input_hash == step_hash
-            ).order_by(StepCache.created_at.desc()).first()
-            
-            if cached and not step.force_rerun and step.cache:
-                self.context[step.output_var] = [cached.output_id]
-                entry = self.session.query(DataEntry).get(cached.output_id)
-                if step.export:
-                    export_path = self.storage.create_export_file(step.export, entry.id)
-                    shutil.copy(entry.path, export_path)
-                if debug:
-                    print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
-                    print("Cached Output ID: ", cached.output_id)
-                    print("Cached Output Path: ", entry.path)
+
+            # ── 多输出缓存: 仅扁平 (命名多输出不缓存, 因 StepCache 无 group 信息) ──
+            if process_desc["output_type"] == "multi" and not step.outputs and step.cache and not step.force_rerun:
+                cached_rows = self.session.query(StepCache).filter(
+                    StepCache.input_hash == step_hash
+                ).order_by(StepCache.id).all()
+                if cached_rows:
+                    cached_ids = [c.output_id for c in cached_rows]
+                    if all(self.session.query(DataEntry).get(eid) for eid in cached_ids):
+                        self.context[step.output_var] = cached_ids
+                        if debug:
+                            print(f"  [cache] flat multi: {cached_ids}")
+                            print("-------------------------------------------")
+                        continue
+
+            # ── 单输出缓存检查 ──
+            if process_desc["output_type"] != "multi":
+                cached = self.session.query(StepCache).filter(
+                    StepCache.input_hash == step_hash
+                ).order_by(StepCache.created_at.desc()).first()
+
+                if cached and not step.force_rerun and step.cache:
+                    self.context[step.output_var] = [cached.output_id]
+                    entry = self.session.query(DataEntry).get(cached.output_id)
                     if step.export:
-                        print("Exported To Path: ", export_path)
-                    print("-------------------------------------------")
-                continue
+                        export_path = self.storage.create_export_file(step.export, entry.id)
+                        shutil.copy(entry.path, export_path)
+                    if debug:
+                        print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
+                        print("Cached Output ID: ", cached.output_id)
+                        print("Cached Output Path: ", entry.path)
+                        if step.export:
+                            print("Exported To Path: ", export_path)
+                        print("-------------------------------------------")
+                    continue
+            if process_desc["output_type"] == "multi" and step.cache and not step.force_rerun:
+                cached_rows = self.session.query(StepCache).filter(
+                    StepCache.input_hash == step_hash
+                ).order_by(StepCache.id).all()
+                if cached_rows:
+                    cached_ids = [c.output_id for c in cached_rows]
+                    # 验证所有条目都存在
+                    if all(self.session.query(DataEntry).get(eid) for eid in cached_ids):
+                        self.context[step.output_var] = cached_ids
+                        if debug:
+                            print(f"  [cache] multi-output: {cached_ids}")
+                            print("-------------------------------------------")
+                        continue
 
             if debug:
                 print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
@@ -99,10 +168,25 @@ class PipelineRunner:
                 **step.params
             )
 
+            # ── 命名多输出: processor 返回 {"group_a": [entries], ...} ──
+            if isinstance(result, dict):
+                for group_name, group_entries in result.items():
+                    var_name = step.output_var
+                    if step.outputs and group_name in step.outputs:
+                        var_name = step.outputs[group_name]
+                    elif group_name != step.output_var:
+                        var_name = f"{step.output_var}_{group_name}"
+                    self.context[var_name] = [e.id for e in group_entries]
+                    if debug:
+                        print(f"  [{step.output_var}] group '{group_name}' → ${var_name}: {[e.id for e in group_entries]}")
+                if debug:
+                    print("-------------------------------------------")
+                continue
+
             is_multi = isinstance(result, list)
             entries = result if is_multi else [result]
 
-            # 记录缓存（仅单输出）
+            # 记录缓存（单输出）
             if step.cache and not is_multi:
                 self.session.add(StepCache(
                     input_hash=step_hash,
@@ -121,6 +205,11 @@ class PipelineRunner:
                 if step.export:
                     print(f"  Exported To: {export_path}")
                 print("-------------------------------------------")
+
+            # 缓存多输出 (list) — 每个输出一行 StepCache
+            if step.cache and is_multi:
+                for e in entries:
+                    self.session.add(StepCache(input_hash=step_hash, output_id=e.id))
 
             self.context[step.output_var] = [e.id for e in entries]
             self._log_step(step, entries[0].id)

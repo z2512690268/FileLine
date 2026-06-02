@@ -1,0 +1,81 @@
+# ═══════════════════════════════════════════════════════════════
+# 复杂 DAG — 命名多输出 + 各分支独立处理 + 汇合
+# ═══════════════════════════════════════════════════════════════
+#
+#                     ┌─ csv_multiplier(x2) ──→ branch_a
+#                     │
+#  input_data.csv ────┤
+#                     │
+#                     └─ test_named_split(split_col=cat)
+#                          ├─ "A" ─→ csv_multiplier(x10) → path_a
+#                          ├─ "B" ─→ csv_multiplier(x100) → path_b
+#                          └─ "C" ─→ csv_multiplier(x1) → path_c
+#
+#  功能:
+#     ✅ 命名多输出: 每个 group 独立命名 (A/B/C)
+#     ✅ 不同分支不同参数: A→×10, B→×100, C→×1
+#     ✅ 汇合: 所有路径结果合并出图
+# ═══════════════════════════════════════════════════════════════
+
+initial_load:
+  include:
+    - path: "FileLine-Pipelines/test/input_*.csv"
+      tags: [raw]
+  type: raw
+  global_tags: [DAG_NAMED]
+
+steps:
+  # ─── 分支 A: 直接放大 ───
+  - processor: csv_multiplier
+    inputs: initial
+    output: branch_a
+    params:
+      multiplier: 2
+
+  # ─── 命名多输出: 按 cat 拆分为独立变量 ───
+  - processor: test_named_split
+    inputs: initial
+    outputs:
+      A: path_a
+      B: path_b
+      C: path_c
+
+  # ─── 每条路径独立处理 (不同参数) ───
+  - processor: csv_multiplier
+    inputs: path_a
+    output: result_a
+    params:
+      multiplier: 10
+
+  - processor: csv_multiplier
+    inputs: path_b
+    output: result_b
+    params:
+      multiplier: 100
+
+  - processor: csv_multiplier
+    inputs: path_c
+    output: result_c
+    params:
+      multiplier: 1
+
+  # ─── 汇合: 全路径合并 ───
+  - processor: csv_concat
+    inputs: [branch_a, result_a, result_b, result_c]
+    output: merged
+
+  # ─── 画图 ───
+  - processor: plot_grouped_bar
+    inputs: merged
+    output: chart
+    params:
+      main_group_col: cat
+      sub_group_col: group
+      value_col: value
+      title: "Named Multi-Output DAG"
+    export: named_dag_chart.pdf
+
+final_output:
+  - name: merged
+    export: named_merged.csv
+  - name: chart

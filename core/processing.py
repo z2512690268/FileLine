@@ -182,40 +182,59 @@ class DataProcessor:
         self.session.commit()
         return entry
 
-    def _run_multi(self, processor, processor_name, params, proc_input, parent_entries) -> List[DataEntry]:
-        """多输出执行：processor 接收 output_dir，返回 [(filename, tags), ...]"""
+    def _build_entry_from_tempfile(self, tmpdir, filename, raw_tags, processor_name,
+                                    desc_extra, parent_entries):
+        """从临时文件创建 DataEntry（带语义命名）"""
+        from pathlib import Path as _P
+        src = tmpdir / filename
+        ext = src.suffix
+        stem = _P(filename).stem
+        tags = [raw_tags] if isinstance(raw_tags, str) else list(raw_tags)
+        _, entry = self.storage.create_processed_file(ext=ext, session=self.session)
+        semantic = f"{entry.id}_{stem}{ext}" if stem else f"{entry.id}{ext}"
+        dst = _P(entry.path).parent / semantic
+        shutil.copy(src, dst)
+        entry.path = str(dst)
+        entry.description = f"Processed by {processor_name}, {desc_extra}"
+        if parent_entries:
+            entry.parents = parent_entries
+        self._add_auto_tags(entry, tags)
+        return entry
+
+    def _run_multi(self, processor, processor_name, params, proc_input, parent_entries):
+        """多输出: 返回 list 或 dict (命名组)"""
         tmpdir = Path(tempfile.mkdtemp())
         try:
             kwargs = {"output_dir": tmpdir, **params}
-            if proc_input is not None:
-                results = processor["func"](proc_input, **kwargs)
-            else:
-                results = processor["func"](**kwargs)
-
+            results = processor["func"](proc_input, **kwargs) if proc_input is not None else processor["func"](**kwargs)
             if not results:
-                return []
+                return {} if isinstance(results, dict) else []
 
+            # dict → 命名组:  {"group_a": [(fname, tags), ...], ...}
+            if isinstance(results, dict):
+                output = {}
+                for group_name, items in results.items():
+                    group_entries = []
+                    for item in (items or []):
+                        fname = item[0] if isinstance(item, (list, tuple)) else str(item)
+                        raw = item[1] if isinstance(item, (list, tuple)) and len(item) > 1 else []
+                        e = self._build_entry_from_tempfile(
+                            tmpdir, fname, raw, processor_name,
+                            f"group={group_name}", parent_entries)
+                        group_entries.append(e)
+                    output[group_name] = group_entries
+                self.session.commit()
+                return output
+
+            # list → 扁平多输出 (原有行为)
             created = []
             for item in results:
-                if isinstance(item, str):
-                    filename, raw_tags = item, []
-                elif isinstance(item, (list, tuple)):
-                    filename = item[0]
-                    raw_tags = item[1] if len(item) > 1 else []
-                else:
-                    filename, raw_tags = str(item), []
-                tags = [raw_tags] if isinstance(raw_tags, str) else list(raw_tags)
-                src = tmpdir / filename
-                ext = src.suffix
-                _, entry = self.storage.create_processed_file(ext=ext, session=self.session)
-                shutil.copy(src, entry.path)
-                desc_args = f"id: {proc_input.id if hasattr(proc_input, 'id') else 'none'}, params: {params}" \
+                fname = item[0] if isinstance(item, (list, tuple)) else str(item)
+                raw = item[1] if isinstance(item, (list, tuple)) and len(item) > 1 else []
+                desc = f"id: {proc_input.id if hasattr(proc_input, 'id') else 'none'}, params: {params}" \
                     if proc_input is not None else f"params: {params}"
-                entry.description = f"Processed by {processor_name}, {desc_args}"
-                if parent_entries:
-                    entry.parents = parent_entries
-                self._add_auto_tags(entry, tags)
-                created.append(entry)
+                e = self._build_entry_from_tempfile(tmpdir, fname, raw, processor_name, desc, parent_entries)
+                created.append(e)
             self.session.commit()
             return created
         finally:

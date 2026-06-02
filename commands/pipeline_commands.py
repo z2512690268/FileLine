@@ -73,18 +73,21 @@ def run(config_file, global_config, debug):
         tags=config["initial_load"].get("global_tags", [])
     )
     
-    # 解析处理步骤
-    steps = [
-        PipelineStep(
+    # 解析处理步骤 (支持 output 单变量 或 outputs 命名多输出)
+    steps = []
+    for step in config["steps"]:
+        out_var = step.get("output", "")
+        out_dict = step.get("outputs", None)
+        steps.append(PipelineStep(
             processor=step["processor"],
             inputs=step.get("inputs", "initial"),
             params=step.get("params", {}),
-            output_var=step["output"],
+            output_var=out_var,
+            outputs=out_dict,
             cache=step.get("cache", True),
             force_rerun=step.get("force_rerun", False),
             export=step.get("export", None)
-        ) for step in config["steps"]
-    ]
+        ))
     
     # 执行流水线
     with get_session() as session:
@@ -95,21 +98,23 @@ def run(config_file, global_config, debug):
         for output_config in final_outputs:
             output_name = output_config["name"]
             export_config = output_config.get("export", None)
-            entry_id = result.get(output_name, None)
-            
-            if not entry_id:
+            entry_ids = result.get(output_name, [])
+
+            if not entry_ids:
                 click.echo(f"未找到输出变量: {output_name}")
                 continue
-            
-            entry = session.query(DataEntry).get(entry_id)
-            click.echo(f"输出名称: {output_name}, 输出ID: {entry_id}")
-            click.echo(f"输出文件路径: {entry.path}")
-            
-            # 导出结果
-            if export_config:
-                export_path = runner.storage.create_export_file(export_config, entry.id)
-                shutil.copyfile(entry.path, export_path)
-                click.echo(f"导出结果到: {export_path}")
+
+            for entry_id in entry_ids:
+                entry = session.query(DataEntry).get(entry_id)
+                if entry is None:
+                    continue
+                click.echo(f"输出 {output_name}: ID={entry_id}, 文件={entry.path}")
+
+                # 导出结果（多输出时只导出第一个）
+                if export_config and entry_id == entry_ids[0]:
+                    export_path = runner.storage.create_export_file(export_config, entry.id)
+                    shutil.copyfile(entry.path, export_path)
+                    click.echo(f"  导出到: {export_path}")
 
 """
 initial_load:

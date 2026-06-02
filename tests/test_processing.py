@@ -157,7 +157,7 @@ class TestMultiOutput:
         dp = DataProcessor(storage, db_session)
         results = dp.run("_test_split", entry.id)
         for e in results:
-            assert Path(e.path).stem == str(e.id)
+            assert Path(e.path).stem.startswith(str(e.id))
             assert Path(e.path).exists()
 
     def test_tags_and_parents(self, storage, sample_csv, db_session):
@@ -203,5 +203,5 @@ class TestMultiOutput:
         assert len(results) == 3
         for e in results:
             assert Path(e.path).exists()
-            assert Path(e.path).stem == str(e.id)
+            assert Path(e.path).stem.startswith(str(e.id))
         ProcessorRegistry._processors.pop("_test_gen_multi", None)
