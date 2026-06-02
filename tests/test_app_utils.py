@@ -84,7 +84,7 @@ class TestProvenance:
 
         ProcessorRegistry._processors.pop("_test_prov_proc", None)
 
-    def test_tree_for_nonexistent_returns_none(self):
+    def test_tree_for_nonexistent_returns_none(self, test_experiment):
         from app_utils import build_provenance_tree
         tree = build_provenance_tree(99999)
         assert tree is None

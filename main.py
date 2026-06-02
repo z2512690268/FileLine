@@ -31,7 +31,7 @@ def cli(ctx, experiment: Optional[str], confirm_exp: bool):
     try:
         from core.base import init_db
         init_db()
-    except RuntimeError:
+    except (RuntimeError, TypeError, KeyError):
         pass
 
 cli.add_command(data)
