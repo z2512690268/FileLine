@@ -29,6 +29,7 @@ pipelines/
 dummy
 /data/
 /managed_pipelines/
+.undo_log
 *.gpumon
 test_data/
 docs/

@@ -8,6 +8,7 @@ from .show import show_cmd
 from .trace import trace_cmd
 from .delete import delete_cmd
 from .check import check_cmd
+from .undo import undo_cmd
 
 
 @click.group()
@@ -24,3 +25,4 @@ data.add_command(show_cmd, name="show")
 data.add_command(trace_cmd, name="trace")
 data.add_command(delete_cmd, name="delete")
 data.add_command(check_cmd, name="check")
+data.add_command(undo_cmd, name="undo")

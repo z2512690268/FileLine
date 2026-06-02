@@ -18,6 +18,9 @@ def add_cmd(file_path, description):
             entry.description = description
             session.commit()
             entry_id = entry.id
-        click.secho(f"成功添加数据 ID: {entry_id}", fg='green')
+        from core.base import experiment_manager
+        from core.undo import UndoLog
+        UndoLog().record(entry_id, f"add {Path(file_path).name}")
+        click.secho(f"[{experiment_manager.current_experiment}] 成功添加数据 ID: {entry_id}", fg='green')
     except Exception as e:
         click.secho(f"添加失败: {str(e)}", fg='red')

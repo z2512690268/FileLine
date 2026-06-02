@@ -62,4 +62,5 @@ def delete_cmd(ids, yes):
             click.secho(f"  已删除条目 ID {entry.id}", fg="green")
 
         session.commit()
-        click.secho(f"成功删除 {len(entries)} 条记录", fg="green")
+        from core.base import experiment_manager
+        click.secho(f"[{experiment_manager.current_experiment}] 成功删除 {len(entries)} 条记录", fg="green")

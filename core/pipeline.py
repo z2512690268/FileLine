@@ -124,7 +124,16 @@ class PipelineRunner:
 
             self.context[step.output_var] = [e.id for e in entries]
             self._log_step(step, entries[0].id)
-        
+
+        # 记录撤销日志
+        all_ids = []
+        for var, ids in self.context.items():
+            if var != "initial":
+                all_ids.extend(ids)
+        if all_ids:
+            from .undo import UndoLog
+            UndoLog().record(all_ids, f"pipeline ({len(all_ids)} entries)")
+
         return self.context
 
     def _get_file_mtime(self, file_path: str) -> float:

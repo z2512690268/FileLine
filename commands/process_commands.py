@@ -45,7 +45,10 @@ def run(processor_name, input_ids, param):
             )
         session.commit()
         ids_str = ", ".join(str(e.id) for e in entries)
-        click.secho(f"处理成功！生成数据ID: {ids_str}", fg='green')
+        from core.base import experiment_manager
+        from core.undo import UndoLog
+        UndoLog().record([e.id for e in entries], f"process {processor_name}")
+        click.secho(f"[{experiment_manager.current_experiment}] 处理成功！生成数据ID: {ids_str}", fg='green')
 
 def _parse_input_ids(input_str: str) -> List[int]:
     """解析输入ID为列表"""
