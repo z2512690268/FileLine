@@ -285,16 +285,16 @@ def import_cmd(package, name, pipelines_dir):
             conn.commit()
             conn.close()
 
-        # 解压 pipeline 文件
-        pipelines_target = experiment_manager.project_root / pipelines_dir / exp_name
+        # 解压 pipeline 文件 (到实验目录内, 自包含)
+        pip_exp_target = exp_dir / "pipelines"
         for m in tar.getmembers():
             if m.name.startswith("pipelines/") and m.isfile():
                 fname = "/".join(m.name.split("/")[1:])
-                target = pipelines_target / fname
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with tar.extractfile(m) as src_f:
-                    with open(str(target), "wb") as dst_f:
-                        shutil.copyfileobj(src_f, dst_f)
+                for target in [pip_exp_target / fname]:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with tar.extractfile(m) as src_f:
+                        with open(str(target), "wb") as dst_f:
+                            shutil.copyfileobj(src_f, dst_f)
 
         # 解压 experiment-specific processor 文件
         proc_target = exp_dir / "processors"
