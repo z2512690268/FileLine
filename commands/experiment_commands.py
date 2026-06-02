@@ -55,13 +55,15 @@ def delete(name):
         experiments = experiment_manager.get_experiments()
         if name not in experiments:
             raise ValueError(f"实验 {name} 不存在")
-        exp_dir = experiment_manager.base_path
+        config = experiments[name]
+        exp_dir = Path(config['data_root'])
         if exp_dir.exists():
             import shutil
             shutil.rmtree(exp_dir)
         del experiments[name]
         experiment_manager._save_experiments(experiments)
+        if experiment_manager.current_experiment == name:
+            experiment_manager.delete_current()
         click.secho(f"成功删除实验: {name}", fg='green')
-        experiment_manager.delete_current()
     except Exception as e:
         click.secho(f"删除失败: {str(e)}", fg='red')

@@ -11,13 +11,14 @@ from core.storage import FileStorage
 def add_cmd(file_path, description):
     """添加原始数据文件"""
     storage = FileStorage()
-    target_path = storage.store_raw_data(file_path, 'raw')
-    
+    target_path = storage.store_raw_data(file_path)
+
     try:
         with get_session() as session:
             entry = DataEntry(
                 type='raw',
                 path=str(target_path.absolute()),
+                original_path=str(Path(file_path).absolute()),
                 description=description
             )
             session.add(entry)

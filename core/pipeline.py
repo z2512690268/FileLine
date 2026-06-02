@@ -176,6 +176,11 @@ class PipelineRunner:
 
             if cache and cache.last_mtime == current_mtime:
                 entry = self.session.query(DataEntry).get(cache.data_entry_id)
+                if entry is None:
+                    # 缓存指向的条目已被删除（如 data delete/check --fix），重新加载
+                    self.session.delete(cache)
+                    self.session.flush()
+                    cache = None
                 if debug:
                     print(f"已缓存初始文件： {file_path} ，ID: {entry.id}")
             else:
