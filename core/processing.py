@@ -15,6 +15,7 @@ from .storage import FileStorage
 class ProcessorRegistry:
     """处理函数注册中心（支持任意文件类型）"""
     _processors: Dict[str, Dict] = {}
+    _overwrite_mode: bool = False  # True=允许实验版本覆盖全局
 
     @classmethod
     def dependencies(cls, deps):
@@ -48,7 +49,8 @@ class ProcessorRegistry:
         def decorator(func: Callable):
             _name = name or func.__name__
             if _name in cls._processors:
-                raise ValueError(f"处理器 {_name} 已注册")
+                if not cls._overwrite_mode:
+                    raise ValueError(f"处理器 {_name} 已注册")
             sig = inspect.signature(func)
             func_hash = cls._calculate_hash(func)
 
@@ -58,6 +60,7 @@ class ProcessorRegistry:
 
             cls._processors[_name] = {
                 "func": wrapper,
+                "source_file": str(Path(inspect.getfile(func)).resolve()),
                 "input_type": input_type,
                 "output_type": output_type,
                 "output_ext": output_ext,
@@ -298,25 +301,24 @@ class DataProcessor:
 
 
 def load_processors_from_dir(directory: Path):
-    """从任意目录加载 processor Python 文件并注册到系统中
-
-    用于导入的实验自带 processor (如 experiments/<name>/processes/*.py)
-    """
+    """从任意目录加载 processor; 实验版本可覆盖全局同名版本"""
     if not directory.is_dir():
         return
-    for py_file in sorted(directory.glob("*.py")):
-        if py_file.stem.startswith("_"):
-            continue
-        # 用 importlib.util 从文件路径加载 (不在 sys.path 中也能加载)
-        module_name = f"_exp_processor_{py_file.stem}"
-        try:
-            spec = importlib.util.spec_from_file_location(module_name, py_file)
-            if spec and spec.loader:
-                mod = importlib.util.module_from_spec(spec)
-                # 已加载则跳过
-                if module_name in sys.modules:
-                    continue
-                sys.modules[module_name] = mod
-                spec.loader.exec_module(mod)
-        except Exception as e:
-            pass  # 静默跳过无法加载的模块
+    ProcessorRegistry._overwrite_mode = True
+    try:
+        for py_file in sorted(directory.glob("*.py")):
+            if py_file.stem.startswith("_"):
+                continue
+            module_name = f"_exp_processor_{py_file.stem}"
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, py_file)
+                if spec and spec.loader:
+                    mod = importlib.util.module_from_spec(spec)
+                    if module_name in sys.modules:
+                        continue
+                    sys.modules[module_name] = mod
+                    spec.loader.exec_module(mod)
+            except Exception:
+                pass
+    finally:
+        ProcessorRegistry._overwrite_mode = False

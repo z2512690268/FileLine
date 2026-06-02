@@ -1,4 +1,5 @@
 # commands/pipeline_commands.py
+import inspect
 import click
 import yaml
 from pathlib import Path
@@ -7,7 +8,7 @@ import re
 from core.pipeline import PipelineRunner, PipelineStep, InitialLoadConfig, IncludeSpec
 from core.storage import FileStorage
 from core.models import DataEntry, Tag
-from core.base import get_session
+from core.base import get_session, experiment_manager
 
 @click.group()
 def pipeline():
@@ -183,6 +184,38 @@ def run(config_file, global_config, debug, dry_run):
             force_rerun=step.get("force_rerun", False),
             export=step.get("export", None)
         ))
+
+    # ── 自动快照: 把 pipeline/processor 当前版本存入实验目录 ──
+    exp_name = experiment_manager.current_experiment
+    if exp_name:
+        from core.processing import load_processors_from_dir
+        load_processors_from_dir(
+            experiment_manager.project_root / "experiments" / exp_name / "processors"
+        )
+        snap_pip_dir = experiment_manager.project_root / "experiments" / exp_name / "pipelines"
+        snap_proc_dir = experiment_manager.project_root / "experiments" / exp_name / "processors"
+        snap_pip_dir.mkdir(parents=True, exist_ok=True)
+        snap_proc_dir.mkdir(parents=True, exist_ok=True)
+
+        # 复制 pipeline YAML
+        import shutil as _sh
+        yaml_dst = snap_pip_dir / Path(config_file).name
+        _sh.copy2(config_file, yaml_dst)
+        if global_config:
+            _sh.copy2(global_config, snap_pip_dir / Path(global_config).name)
+
+        # 复制用到的 processor 源文件
+        for step in config["steps"]:
+            pname = step["processor"]
+            try:
+                proc_info = ProcessorRegistry.get_processor(pname)
+                src_file = Path(proc_info.get("source_file", ""))
+                if src_file.exists() and src_file.suffix == ".py":
+                    if not str(src_file).startswith(str(snap_proc_dir)):
+                        dst = snap_proc_dir / src_file.name
+                        _sh.copy2(str(src_file), str(dst))
+            except Exception:
+                pass
 
     # 执行流水线
     with get_session() as session:
