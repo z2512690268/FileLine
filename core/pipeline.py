@@ -34,6 +34,7 @@ class IncludeSpec:
     path: str                          # Glob路径模式
     re_pattern: Optional[str] = None   # 针对该模式的正则表达式
     tags: Optional[List[str]] = None   # 该模式独有的标签
+    source: str = "initial"            # 输出到 pipeline 的变量名 (默认 initial)
     sort_by: Optional[str] = None      # 排序: name_asc/name_desc/mtime/mtime_asc
     sort_key: Optional[str] = None     # 提取排序键的 regex (如 "(\\d{8})" 取日期)
     limit: Optional[int] = None        # 取前 N 个 (与 sort_by/sort_key 配合)
@@ -56,9 +57,10 @@ class PipelineRunner:
                steps: List[PipelineStep],
                debug: bool = False) -> Dict:
         """执行带初始加载的流水线"""
-        # 1. 初始文件加载
-        input_ids = self._load_initial_files(initial_load, debug)
-        self.context["initial"] = input_ids
+        # 1. 初始文件加载 (返回 {source: [ids]})
+        sources = self._load_initial_files(initial_load, debug)
+        for src_name, src_ids in sources.items():
+            self.context[src_name] = src_ids
         
         # 2. 执行处理步骤
         processor = DataProcessor(self.storage, self.session)
@@ -228,11 +230,10 @@ class PipelineRunner:
             self.context[step.output_var] = [e.id for e in entries]
             self._log_step(step, entries[0].id)
 
-        # 记录撤销日志
+        # 记录撤销日志 (包含初始加载和所有步骤)
         all_ids = []
         for var, ids in self.context.items():
-            if var != "initial":
-                all_ids.extend(ids)
+            all_ids.extend(ids)
         if all_ids:
             from .undo import UndoLog
             UndoLog().record(all_ids, f"pipeline ({len(all_ids)} entries)")
@@ -244,124 +245,105 @@ class PipelineRunner:
         return os.path.getmtime(file_path)
 
     def _load_initial_files(self, config: InitialLoadConfig,
-                                debug: bool = False) -> List[int]:
-        """加载初始文件到系统（支持包含/排除模式）"""
-        # 收集所有包含文件
-        file_tags: Dict[str, List[str]] = {}
-        all_included: Set[str] = set()
+                                debug: bool = False) -> Dict[str, List[int]]:
+        """加载初始文件, 返回 {source_name: [entry_id, ...]}"""
+        source_buckets: Dict[str, List[Path]] = {}
+        spec_tags: Dict[str, List[str]] = {}
         for spec in config.include_patterns:
-            pattern = spec.path
-            tags = spec.tags or []
-            matches = glob.glob(pattern, recursive=True)
+            matches = glob.glob(spec.path, recursive=True)
 
-            # 正则二次过滤
+            # 正则过滤
             if spec.re_pattern:
                 try:
-                    pattern = re.compile(spec.re_pattern)
-                    matches = [m for m in matches if pattern.search(m)]
+                    _re = re.compile(spec.re_pattern)
+                    matches = [m for m in matches if _re.search(m)]
                 except re.error as e:
                     raise ValueError(f"无效的正则表达式 '{spec.re_pattern}': {e}")
 
-            # 排序 + 取最新 N 个
+            # 排序 + limit
             if spec.sort_by or spec.sort_key:
                 if spec.sort_key:
                     try:
-                        _key_re = re.compile(spec.sort_key)
-                        def _key_func(f):
-                            m = _key_re.search(str(f))
-                            return m.group(1) if m else ""
+                        _kr = re.compile(spec.sort_key)
+                        def _kf(f, _r=_kr):
+                            m = _r.search(str(f)); return m.group(1) if m else ""
                     except re.error:
-                        _key_func = lambda f: str(f)
+                        _kf = str
                 else:
-                    _key_func = str
-
+                    _kf = str
                 if spec.sort_by == "name_desc":
-                    matches.sort(key=_key_func, reverse=True)
+                    matches.sort(key=_kf, reverse=True)
                 elif spec.sort_by == "mtime":
                     matches.sort(key=lambda f: os.path.getmtime(f), reverse=True)
                 elif spec.sort_by == "mtime_asc":
                     matches.sort(key=lambda f: os.path.getmtime(f))
-                else:  # name_asc 或未指定 sort_by 但有 sort_key
-                    matches.sort(key=_key_func)
+                else:
+                    matches.sort(key=_kf)
             if spec.limit is not None and spec.limit > 0:
                 matches = matches[:spec.limit]
 
-            all_included.update(matches)
-            for file in matches:
-                file_tags.setdefault(file, []).extend(tags)
-        
-        # 处理排除模式
-        if config.exclude_patterns:
-            all_excluded = set()
-            for exclude_pattern in config.exclude_patterns:
-                for file in all_included:
-                    if Path(file).match(exclude_pattern):  # 使用 Path.match
-                        all_excluded.add(file)
-            all_included -= all_excluded
-        
-        matched_files = sorted(all_included)
-        
-        if not matched_files:
+            # 全局排除
+            for ex in (config.exclude_patterns or []):
+                matches = [m for m in matches if not Path(m).match(ex)]
+
+            src = spec.source
+            source_buckets.setdefault(src, []).extend(matches)
+            spec_tags.setdefault(src, []).extend(spec.tags or [])
+
+        if not any(v for v in source_buckets.values()):
             raise FileNotFoundError(
-                f"未找到匹配文件。包含模式: {config.include_patterns}，排除模式: {config.exclude_patterns}"
+                f"未找到匹配文件: {[s.path for s in config.include_patterns]}"
             )
-        
-        entries = []
-        for file_path in matched_files:
-            file_tags[file_path].append(file_path)
-            current_mtime = self._get_file_mtime(file_path)
-            # 查询缓存记录
-            cache = self.session.query(FileMTimeCache).filter(
-                FileMTimeCache.file_path == file_path
-            ).order_by(FileMTimeCache.created_at.desc()).first()
 
-            if cache and cache.last_mtime == current_mtime:
-                entry = self.session.query(DataEntry).get(cache.data_entry_id)
-                if entry is None:
-                    # 缓存指向的条目已被删除（如 data delete/check --fix），重新加载
-                    self.session.delete(cache)
+        result: Dict[str, List[int]] = {}
+        for src, files in source_buckets.items():
+            files = sorted(set(files))
+            src_entries = []
+            for file_path in files:
+                current_mtime = self._get_file_mtime(file_path)
+                cache = self.session.query(FileMTimeCache).filter(
+                    FileMTimeCache.file_path == file_path
+                ).order_by(FileMTimeCache.created_at.desc()).first()
+
+                if cache and cache.last_mtime == current_mtime:
+                    entry = self.session.query(DataEntry).get(cache.data_entry_id)
+                    if entry is None:
+                        self.session.delete(cache)
+                        self.session.flush()
+                        cache = None
+                    if debug:
+                        print(f"已缓存初始文件： {file_path} ，ID: {entry.id}")
+                else:
+                    entry = self.storage.store_raw_data(file_path, self.session)
+                    entry.type = config.data_type
+                    entry.description = f"自动加载自: {file_path}"
                     self.session.flush()
-                    cache = None
-                if debug:
-                    print(f"已缓存初始文件： {file_path} ，ID: {entry.id}")
-            else:
-                # 存储文件（内部创建 DataEntry 并获取 ID）
-                entry = self.storage.store_raw_data(file_path, self.session)
-                entry.type = config.data_type
-                entry.description = f"自动加载自: {file_path}"
-                self.session.flush()
-                # 更新缓存
-                self.session.add(FileMTimeCache(
-                    file_path=file_path,
-                    data_entry_id=entry.id,
-                    last_mtime=current_mtime
-                ))
-                if debug:
-                    print(f"重新加载初始文件 {file_path} ，ID: {entry.id}")
+                    self.session.add(FileMTimeCache(
+                        file_path=file_path, data_entry_id=entry.id, last_mtime=current_mtime
+                    ))
+                    if debug:
+                        print(f"重新加载初始文件 {file_path} ，ID: {entry.id}")
 
-            if file_tags.get(file_path):
-                for tag_name in file_tags[file_path]:
-                    tag = self.session.query(Tag).filter_by(name=tag_name).first()
+                # 每源标签 + 全局标签
+                for tn in (spec_tags.get(src, []) + (config.tags or [])):
+                    tag = self.session.query(Tag).filter_by(name=tn).first()
                     if not tag:
-                        tag = Tag(name=tag_name)
+                        tag = Tag(name=tn)
                         self.session.add(tag)
-                    entry.tags.append(tag)
+                    if tag not in entry.tags:
+                        entry.tags.append(tag)
 
-            # 添加标签
-            if config.tags:
-                for tag_name in config.tags:
-                    tag = self.session.query(Tag).filter_by(name=tag_name).first()
-                    if not tag:
-                        tag = Tag(name=tag_name)
-                        self.session.add(tag)
-                    entry.tags.append(tag)
-            
-            entries.append(entry)
-        
-        self.session.commit()
+                src_entries.append(entry)
+
+            self.session.commit()
+            result[src] = [e.id for e in src_entries]
+            if debug:
+                for e in src_entries:
+                    print(f"  [{src}] ID {e.id}: {e.path}")
+
         if debug:
             print("-------------------------------------------")
-        return [e.id for e in entries]
+        return result
  
     def _resolve_inputs(self, inputs: Union[str, List[str]]) -> List[int]:
         """解析输入源"""

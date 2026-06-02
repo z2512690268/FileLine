@@ -156,6 +156,7 @@ def run(config_file, global_config, debug, dry_run):
                 path=p["path"],
                 re_pattern=p.get("regex", None),
                 tags=p.get("tags", []),
+                source=p.get("source", "initial"),
                 sort_by=p.get("sort_by", None),
                 sort_key=p.get("sort_key", None),
                 limit=p.get("limit", None),

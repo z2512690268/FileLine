@@ -36,7 +36,8 @@ class TestInitialLoad:
         config = InitialLoadConfig(
             include_patterns=[IncludeSpec(path=str(tmp_path / "*.csv"))],
         )
-        ids = runner._load_initial_files(config)
+        sources = runner._load_initial_files(config)
+        ids = sources["initial"]
         assert len(ids) == 2
         # 文件已复制到 raw/ 且以 ID 命名
         for eid in ids:
@@ -52,8 +53,8 @@ class TestInitialLoad:
         config = InitialLoadConfig(
             include_patterns=[IncludeSpec(path=str(tmp_path / "*.csv"))],
         )
-        ids = runner._load_initial_files(config)
-        entry = db_session.get(DataEntry, ids[0])
+        sources = runner._load_initial_files(config)
+        entry = db_session.get(DataEntry, sources["initial"][0])
         assert entry.original_path == str(f)
 
     def test_exclude_pattern(self, storage, db_session, test_experiment, tmp_path):
@@ -64,7 +65,8 @@ class TestInitialLoad:
             include_patterns=[IncludeSpec(path=str(tmp_path / "*.csv"))],
             exclude_patterns=["*skip*"],
         )
-        ids = runner._load_initial_files(config)
+        sources = runner._load_initial_files(config)
+        ids = sources["initial"]
         assert len(ids) == 1
         entry = db_session.get(DataEntry, ids[0])
         assert "skip" not in entry.path
@@ -76,10 +78,9 @@ class TestInitialLoad:
         config = InitialLoadConfig(
             include_patterns=[IncludeSpec(path=str(tmp_path / "*.csv"))],
         )
-        ids1 = runner._load_initial_files(config)
-        # 第二次加载应命中 mtime 缓存
-        ids2 = runner._load_initial_files(config)
-        assert ids1 == ids2
+        r1 = runner._load_initial_files(config)
+        r2 = runner._load_initial_files(config)
+        assert r1["initial"] == r2["initial"]
 
     def test_mtime_cache_miss_on_change(self, storage, db_session, test_experiment, tmp_path):
         f = tmp_path / "changed.csv"
@@ -88,12 +89,10 @@ class TestInitialLoad:
         config = InitialLoadConfig(
             include_patterns=[IncludeSpec(path=str(tmp_path / "*.csv"))],
         )
-        ids1 = runner._load_initial_files(config)
-        # 修改文件
+        r1 = runner._load_initial_files(config)
         f.write_text("v,99\n")
-        ids2 = runner._load_initial_files(config)
-        # 新 ID, 旧数据仍存在
-        assert ids2[0] != ids1[0]
+        r2 = runner._load_initial_files(config)
+        assert r2["initial"][0] != r1["initial"][0]
 
     def test_no_match_raises(self, storage, db_session, test_experiment, tmp_path):
         import pytest
@@ -111,8 +110,8 @@ class TestInitialLoad:
             include_patterns=[IncludeSpec(path=str(tmp_path / "*.csv"), tags=["auto_ingest"])],
             tags=["experiment_1"],
         )
-        ids = runner._load_initial_files(config)
-        entry = db_session.get(DataEntry, ids[0])
+        sources = runner._load_initial_files(config)
+        entry = db_session.get(DataEntry, sources["initial"][0])
         tag_names = {t.name for t in entry.tags}
         assert "auto_ingest" in tag_names
         assert "experiment_1" in tag_names
