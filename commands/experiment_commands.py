@@ -57,6 +57,8 @@ def delete(name):
             raise ValueError(f"实验 {name} 不存在")
         config = experiments[name]
         exp_dir = Path(config['data_root'])
+        if not exp_dir.is_absolute():
+            exp_dir = experiment_manager.project_root / exp_dir
         if exp_dir.exists():
             import shutil
             shutil.rmtree(exp_dir)

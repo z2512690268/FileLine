@@ -1,4 +1,5 @@
 # 修改后的 core/base.py
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from .experiment import ExperimentManager
@@ -15,9 +16,13 @@ def get_engine():
             "1. 执行命令: experiment use <名称>\n"
             "2. 启动时添加参数: --experiment <名称>"
         )
-    
+
     config = experiment_manager.get_experiments().get(experiment_manager.current_experiment)
-    return create_engine(f"sqlite:///{config['database']}", 
+    db_path = config['database']
+    # 兼容旧版绝对路径和新的相对路径
+    if not Path(db_path).is_absolute():
+        db_path = str(experiment_manager.project_root / db_path)
+    return create_engine(f"sqlite:///{db_path}",
                        connect_args={"check_same_thread": False})
 
 def get_session():

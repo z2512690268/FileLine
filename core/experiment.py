@@ -5,13 +5,18 @@ from typing import Dict, Optional
 from datetime import datetime
 
 class ExperimentManager:
-    _CONFIG_DIR = Path.cwd() / ".expr_config"
+    _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    _CONFIG_DIR = _PROJECT_ROOT / ".expr_config"
     _CURRENT_FILE = _CONFIG_DIR / "current_experiment"
 
     @property
     def base_path(self) -> Path:
         """获取实验根目录"""
-        return Path.cwd() / "experiments" / self.current_experiment
+        return self._PROJECT_ROOT / "experiments" / self.current_experiment
+
+    @property
+    def project_root(self) -> Path:
+        return self._PROJECT_ROOT
 
     def __init__(self):
         self._CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -53,16 +58,16 @@ class ExperimentManager:
             raise ValueError(f"实验 {name} 已存在")
             
         # 创建实验目录
-        exp_dir = Path.cwd() / "experiments" / name
+        exp_dir = self._PROJECT_ROOT / "experiments" / name
         exp_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # 初始化数据库路径
         db_path = exp_dir / f"{name}.db"
-        
-        # 存储配置
+
+        # 存储配置（相对路径，项目迁移后仍可用）
         experiments[name] = {
-            "database": str(db_path.absolute()),
-            "data_root": str(exp_dir.absolute()),
+            "database": str(Path("experiments") / name / f"{name}.db"),
+            "data_root": str(Path("experiments") / name),
             "description": description,
             "created_at": datetime.now().isoformat()
         }
