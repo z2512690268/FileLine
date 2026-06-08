@@ -203,10 +203,34 @@ def used_variables(content: str) -> list[str]:
     return sorted(set(PLACEHOLDER_RE.findall(content)))
 
 
+def declared_global_variables(config: dict[str, Any]) -> list[str]:
+    requires = config.get("requires") if isinstance(config, dict) else {}
+    globals_decl = requires.get("globals") if isinstance(requires, dict) else []
+    if not isinstance(globals_decl, list):
+        return []
+    return sorted({str(item).strip() for item in globals_decl if str(item).strip()})
+
+
+def pipeline_global_set(config: dict[str, Any]) -> str:
+    value = config.get("global_set") if isinstance(config, dict) else ""
+    return str(value or "").strip()
+
+
+def pipeline_required_variables(text: str, config: dict[str, Any] | None = None) -> list[str]:
+    parsed = config
+    if parsed is None:
+        try:
+            loaded = yaml.safe_load(text)
+            parsed = loaded if isinstance(loaded, dict) else {}
+        except Exception:
+            parsed = {}
+    return sorted(set(used_variables(text)) | set(declared_global_variables(parsed or {})))
+
+
 def resolve_text(content: str, variables: dict[str, str]) -> dict[str, Any]:
-    used = used_variables(content)
+    used = pipeline_required_variables(content)
     resolved = replace_in_text(content, variables)
-    missing = sorted(set(PLACEHOLDER_RE.findall(resolved)))
+    missing = sorted(set(PLACEHOLDER_RE.findall(resolved)) | {key for key in used if key not in variables})
     return {
         "resolvedText": resolved,
         "used": {key: variables[key] for key in used if key in variables},
@@ -222,15 +246,33 @@ def global_set_affected(name: str, experiment: str | None = None) -> list[dict[s
     if not PIPELINES_ROOT.exists():
         return affected
     for path in sorted(PIPELINES_ROOT.rglob("*.y*ml")):
-        if ".git" in path.parts:
+        if ".git" in path.parts or "_globals" in path.parts:
             continue
-        text = path.read_text(encoding="utf-8")
-        used = set(used_variables(text))
+        try:
+            text = path.read_text(encoding="utf-8")
+            loaded = yaml.safe_load(text) or {}
+        except Exception:
+            continue
+        if not isinstance(loaded, dict) or "steps" not in loaded:
+            continue
+        used = set(pipeline_required_variables(text, loaded))
         matched = sorted(used & keys)
-        if matched:
+        bound_set = pipeline_global_set(loaded)
+        if matched or bound_set == name:
+            final_outputs = loaded.get("final_output") or []
+            if not isinstance(final_outputs, list):
+                final_outputs = []
+            output_names = [
+                str(item.get("export") or item.get("name") or "").strip()
+                for item in final_outputs
+                if isinstance(item, dict) and str(item.get("export") or item.get("name") or "").strip()
+            ]
             affected.append({
                 "path": str(path.relative_to(PIPELINES_ROOT)).replace("\\", "/"),
                 "variables": matched,
+                "globalSet": bound_set,
+                "outputCount": len(output_names),
+                "outputs": output_names,
             })
     return affected
 

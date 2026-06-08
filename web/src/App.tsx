@@ -47,7 +47,9 @@ import {
   Entry,
   Experiment,
   ExportItem,
+  GlobalSetAffectedPipeline,
   GlobalSetDetail,
+  GlobalSetRegenerateResult,
   GlobalSetSummary,
   GraphNode,
   Lineage,
@@ -216,6 +218,69 @@ function variablesInText(text: string) {
 
 function looksLikeColor(value: unknown) {
   return typeof value === "string" && /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value.trim());
+}
+
+type GlobalVariableRow = {
+  key: string;
+  type: string;
+  value: unknown;
+  description: string;
+};
+
+function globalSetPayload(text: string): Record<string, unknown> {
+  try {
+    const parsed = yaml.load(text) as Record<string, unknown> | null;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function globalVariableRows(text: string): GlobalVariableRow[] {
+  const payload = globalSetPayload(text);
+  const variables = payload.variables as Record<string, unknown> | undefined;
+  if (!variables || typeof variables !== "object") return [];
+  return Object.entries(variables).map(([key, raw]) => {
+    const item = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : { value: raw };
+    const value = "value" in item ? item.value : raw;
+    const inferredType = looksLikeColor(value) ? "color" : typeof value === "number" ? "number" : Array.isArray(value) ? "list" : typeof value === "object" && value !== null ? "mapping" : "string";
+    return {
+      key,
+      type: String(item.type || inferredType),
+      value,
+      description: String(item.description || "")
+    };
+  });
+}
+
+function updateGlobalSetVariable(text: string, key: string, value: unknown) {
+  const payload = globalSetPayload(text);
+  const variables = { ...((payload.variables as Record<string, unknown> | undefined) || {}) };
+  const current = variables[key];
+  const currentObj = current && typeof current === "object" && !Array.isArray(current) ? current as Record<string, unknown> : { value: current };
+  variables[key] = { ...currentObj, value };
+  payload.variables = variables;
+  return yaml.dump(payload, { lineWidth: 120, noRefs: true, sortKeys: false });
+}
+
+function parseVariableInput(raw: string, type: string) {
+  if (type === "number") {
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : raw;
+  }
+  if (["list", "tuple", "range", "mapping", "dict"].includes(type)) {
+    try {
+      return yaml.load(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
+}
+
+function formatVariableValue(value: unknown) {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  return yaml.dump(value, { flowLevel: 0, lineWidth: 120, noRefs: true, sortKeys: false }).trim();
 }
 
 function dataFitScore(entry: Entry) {
@@ -1563,6 +1628,7 @@ function Workbench({
         if (cancelled) return;
         setGlobalSets(items);
         setSelectedGlobalSet((current) => {
+          if (pipeline?.globalSet && items.some((item) => item.id === pipeline.globalSet)) return pipeline.globalSet;
           if (current && items.some((item) => item.id === current)) return current;
           if (!usedGlobalVariables.length) return "";
           return items[0]?.id || "";
@@ -1574,7 +1640,7 @@ function Workbench({
     return () => {
       cancelled = true;
     };
-  }, [experiment, selectedPipelinePath, usedGlobalVariables.length]);
+  }, [experiment, selectedPipelinePath, usedGlobalVariables.length, pipeline?.globalSet]);
 
   // Note: comment text was normalized to avoid mojibake.
   const liveGraph = useMemo(() => {
@@ -1888,11 +1954,16 @@ function GlobalVariablesPanel({
   const [text, setText] = useState("");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [message, setMessage] = useState("");
   const [resolveResult, setResolveResult] = useState<PipelineResolveResult | null>(null);
+  const [affected, setAffected] = useState<GlobalSetAffectedPipeline[]>([]);
+  const [regenerateResult, setRegenerateResult] = useState<GlobalSetRegenerateResult | null>(null);
   const values = detail?.values || {};
+  const variableRows = useMemo(() => globalVariableRows(text), [text]);
   const missing = usedVariables.filter((key) => selectedGlobalSet && !(key in values));
   const hasVariables = usedVariables.length > 0;
+  const affectedOutputs = affected.reduce((total, item) => total + (item.outputCount || 0), 0);
 
   useEffect(() => {
     setMessage("");
@@ -1919,13 +1990,36 @@ function GlobalVariablesPanel({
     };
   }, [experiment, selectedGlobalSet]);
 
+  useEffect(() => {
+    setAffected([]);
+    setRegenerateResult(null);
+    if (!experiment || !selectedGlobalSet) return;
+    let cancelled = false;
+    api.affectedByGlobalSet(experiment, selectedGlobalSet)
+      .then((items) => {
+        if (!cancelled) setAffected(items);
+      })
+      .catch(() => {
+        if (!cancelled) setAffected([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [experiment, selectedGlobalSet, dirty]);
+
   async function refreshSets(nextSelection = selectedGlobalSet) {
     const items = await api.globalSets(experiment);
     setGlobalSets(items);
     if (nextSelection) onSelectGlobalSet(nextSelection);
   }
 
-  async function saveSet() {
+  function updateVariable(key: string, nextValue: unknown) {
+    setText((current) => updateGlobalSetVariable(current || defaultGlobalSetText(selectedGlobalSet || "default_style"), key, nextValue));
+    setDirty(true);
+    setResolveResult(null);
+  }
+
+  async function saveSet(regenerateAfterSave = false) {
     if (!experiment) return;
     const target = selectedGlobalSet || "default_style";
     setBusy(true);
@@ -1937,6 +2031,9 @@ function GlobalVariablesPanel({
       setText(saved.text);
       setDirty(false);
       setMessage("Saved");
+      if (regenerateAfterSave) {
+        await regenerateAffected(saved.id);
+      }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1980,6 +2077,21 @@ function GlobalVariablesPanel({
     }
   }
 
+  async function regenerateAffected(name = selectedGlobalSet) {
+    if (!experiment || !name) return;
+    setRegenerating(true);
+    setMessage("");
+    try {
+      const result = await api.regenerateGlobalSet(experiment, name, "version", false);
+      setRegenerateResult(result);
+      setMessage(result.ok ? `Regenerated ${result.ranPipelines} pipeline(s)` : "Some pipelines failed to regenerate");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   function startNewSet() {
     const name = "default_style";
     onSelectGlobalSet(name);
@@ -1994,10 +2106,13 @@ function GlobalVariablesPanel({
       <summary>
         <Sparkles size={15} />
         <span>Style & variables</span>
-        {selectedGlobalSet && <em>{selectedGlobalSet}</em>}
+        {selectedGlobalSet && <em>Using: {selectedGlobalSet}</em>}
         {!selectedGlobalSet && hasVariables && <em>{usedVariables.length} variable(s)</em>}
       </summary>
       <div className="global-panel-body">
+        {pipeline?.globalSet && (
+          <div className="global-binding-note">This pipeline is bound to <strong>{pipeline.globalSet}</strong> in YAML.</div>
+        )}
         <div className="global-panel-main">
           <label className="global-select">
             <span>Variable set</span>
@@ -2014,12 +2129,48 @@ function GlobalVariablesPanel({
             <button className="secondary-save-button" onClick={startNewSet} disabled={busy}>New set</button>
             <button className="secondary-save-button" onClick={duplicateSet} disabled={busy || !selectedGlobalSet}>Copy set</button>
             <button className="secondary-save-button" onClick={previewResolved} disabled={busy || !pipeline}>Preview YAML</button>
-            <button className="primary-save-button" onClick={saveSet} disabled={busy || (!dirty && !!selectedGlobalSet)}>
+            <button className="secondary-save-button" onClick={() => regenerateAffected()} disabled={busy || regenerating || !selectedGlobalSet || affected.length === 0}>
+              {regenerating ? "Regenerating" : "Regenerate affected outputs"}
+            </button>
+            <button className="primary-save-button" onClick={() => saveSet(false)} disabled={busy || (!dirty && !!selectedGlobalSet)}>
               {busy ? "Working" : selectedGlobalSet ? "Save set" : "Create set"}
+            </button>
+            <button className="primary-save-button" onClick={() => saveSet(true)} disabled={busy || regenerating || !dirty || affected.length === 0}>
+              Save and regenerate
             </button>
           </div>
         </div>
         {detail?.description && <p className="global-description">{detail.description}</p>}
+        {selectedGlobalSet && (
+          <div className="global-impact-summary">
+            This set affects <strong>{affected.length}</strong> pipeline(s) and <strong>{affectedOutputs}</strong> final output(s).
+          </div>
+        )}
+        {variableRows.length > 0 && (
+          <div className="global-variable-editor">
+            {variableRows.map((row) => (
+              <label key={row.key} className="global-variable-field">
+                <span>
+                  <strong>{row.key}</strong>
+                  <em>{row.type}</em>
+                </span>
+                {row.type === "color" || looksLikeColor(row.value) ? (
+                  <div className="global-color-input">
+                    <input type="color" value={String(row.value || "#000000")} onChange={(event) => updateVariable(row.key, event.target.value)} />
+                    <input value={String(row.value || "")} onChange={(event) => updateVariable(row.key, event.target.value)} />
+                  </div>
+                ) : row.type === "number" ? (
+                  <input type="number" value={String(row.value ?? "")} onChange={(event) => updateVariable(row.key, parseVariableInput(event.target.value, row.type))} />
+                ) : ["list", "tuple", "range", "mapping", "dict"].includes(row.type) ? (
+                  <textarea value={formatVariableValue(row.value)} onChange={(event) => updateVariable(row.key, parseVariableInput(event.target.value, row.type))} />
+                ) : (
+                  <input value={String(row.value ?? "")} onChange={(event) => updateVariable(row.key, event.target.value)} />
+                )}
+                {row.description && <small>{row.description}</small>}
+              </label>
+            ))}
+          </div>
+        )}
         <div className="global-variable-grid">
           {(hasVariables ? usedVariables : Object.keys(values)).map((key) => {
             const value = values[key];
@@ -2037,6 +2188,20 @@ function GlobalVariablesPanel({
         {missing.length > 0 && (
           <div className="inline-error">This set is missing {missing.join(", ")} for the current pipeline.</div>
         )}
+        {affected.length > 0 && (
+          <details className="global-affected-list">
+            <summary>Affected pipelines</summary>
+            <div>
+              {affected.slice(0, 12).map((item) => (
+                <div key={item.path} className="global-affected-row">
+                  <strong>{item.path}</strong>
+                  <span>{item.outputCount} output(s)</span>
+                  <small>{item.variables.join(", ") || item.globalSet || selectedGlobalSet}</small>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
         <details className="global-editor">
           <summary>Edit variable set YAML</summary>
           <textarea
@@ -2052,6 +2217,17 @@ function GlobalVariablesPanel({
           <details className="global-resolved-preview" open>
             <summary>Resolved YAML preview</summary>
             <pre>{resolveResult.resolvedText}</pre>
+          </details>
+        )}
+        {regenerateResult && (
+          <details className="global-regenerate-result" open={!regenerateResult.ok}>
+            <summary>Regenerate result</summary>
+            {regenerateResult.results.map((item) => (
+              <div key={item.path} className={`global-regenerate-row ${item.ok ? "ok" : "failed"}`}>
+                <strong>{item.path}</strong>
+                <span>{item.summary}</span>
+              </div>
+            ))}
           </details>
         )}
         {message && <span className="global-message">{message}</span>}
@@ -2076,6 +2252,26 @@ variables:
     type: number
     value: 300
     description: Export resolution
+  FIG_SIZE:
+    type: tuple
+    value: [7, 4]
+    description: Matplotlib figsize as [width, height]
+  FONT_FAMILY:
+    type: string
+    value: DejaVu Sans
+    description: Global font family
+  BASE_FONT_SIZE:
+    type: number
+    value: 12
+    description: Base label font size
+  LINE_WIDTH:
+    type: number
+    value: 2
+    description: Line width
+  LEGEND_LOC:
+    type: string
+    value: best
+    description: Legend location
 `;
 }
 

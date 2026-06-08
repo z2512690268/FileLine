@@ -1967,6 +1967,88 @@ select {
   font-weight: 800;
 }
 
+.global-binding-note,
+.global-impact-summary {
+  min-height: 30px;
+  padding: 7px 10px;
+  border: 1px solid #dbe5ee;
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: #526174;
+  font-size: 12px;
+}
+
+.global-binding-note strong,
+.global-impact-summary strong {
+  color: #0f766e;
+}
+
+.global-variable-editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.global-variable-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.global-variable-field > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #334155;
+  font-size: 12px;
+}
+
+.global-variable-field > span em {
+  color: #64748b;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.global-variable-field input,
+.global-variable-field textarea {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid #dbe3ed;
+  border-radius: 7px;
+  background: #fbfcfe;
+  color: #1f2937;
+  font-size: 12px;
+}
+
+.global-variable-field textarea {
+  min-height: 64px;
+  padding: 8px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.global-variable-field small {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.global-color-input {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.global-color-input input[type="color"] {
+  padding: 2px;
+}
+
 .global-variable-grid {
   display: flex;
   flex-wrap: wrap;
@@ -2014,14 +2096,18 @@ select {
 }
 
 .global-editor,
-.global-resolved-preview {
+.global-resolved-preview,
+.global-affected-list,
+.global-regenerate-result {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fbfcfe;
 }
 
 .global-editor summary,
-.global-resolved-preview summary {
+.global-resolved-preview summary,
+.global-affected-list summary,
+.global-regenerate-result summary {
   min-height: 34px;
   padding: 0 10px;
   color: #475569;
@@ -2055,6 +2141,44 @@ select {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.global-affected-list > div,
+.global-regenerate-result {
+  display: grid;
+  gap: 6px;
+}
+
+.global-affected-row,
+.global-regenerate-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border-top: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+}
+
+.global-affected-row strong,
+.global-regenerate-row strong {
+  overflow: hidden;
+  color: #1f2937;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.global-affected-row small {
+  grid-column: 1 / -1;
+  color: #64748b;
+}
+
+.global-regenerate-row.ok span {
+  color: #0f766e;
+}
+
+.global-regenerate-row.failed span {
+  color: #b91c1c;
 }
 
 .run-button,

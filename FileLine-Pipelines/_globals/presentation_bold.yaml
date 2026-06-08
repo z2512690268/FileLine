@@ -35,3 +35,23 @@ variables:
     type: range
     value: [0, 1]
     description: Y axis range for normalized metrics.
+  FONT_FAMILY:
+    type: string
+    value: DejaVu Sans
+    description: Global font family.
+  BASE_FONT_SIZE:
+    type: number
+    value: 14
+    description: Base axis label font size.
+  LINE_WIDTH:
+    type: number
+    value: 2.5
+    description: Line width for plot processors that expose it.
+  MARKER_STYLE:
+    type: string
+    value: o
+    description: Marker style for processors that expose it.
+  LEGEND_LOC:
+    type: string
+    value: best
+    description: Legend location.

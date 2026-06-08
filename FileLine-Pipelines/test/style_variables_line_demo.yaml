@@ -1,5 +1,15 @@
 name: style_variables_line_demo
 description: Demo pipeline for switching shared style/parameter sets.
+global_set: paper_default
+requires:
+  globals:
+    - FIG_SIZE
+    - FIG_DPI
+    - LINE_COLORS
+    - Y_LIMIT
+    - FONT_FAMILY
+    - BASE_FONT_SIZE
+    - LEGEND_LOC
 initial_load:
   include:
     - path: FileLine-Pipelines/test/versioned/trend_v3.csv
@@ -25,6 +35,10 @@ steps:
       dpi: ${FIG_DPI}
       tag_colors: ${LINE_COLORS}
       ylim: ${Y_LIMIT}
+      global_font_family: ${FONT_FAMILY}
+      xlabel_fontsize: ${BASE_FONT_SIZE}
+      ylabel_fontsize: ${BASE_FONT_SIZE}
+      legend_loc: ${LEGEND_LOC}
     cache: true
 final_output:
   - name: styled_line

@@ -14,6 +14,7 @@ from core.base import get_session, experiment_manager
 from core.global_sets import (
     load_global_values,
     parse_legacy_global_text,
+    pipeline_global_set,
     replace_in_text as replace_global_text,
     used_variables,
 )
@@ -65,6 +66,15 @@ def _global_context(global_config: str | None, global_set: str | None, set_value
         experiment=experiment_manager.current_experiment,
     )
     return values, info
+
+
+def _default_global_set_from_pipeline(config_file: str) -> str:
+    try:
+        raw = Path(config_file).read_text(encoding="utf-8")
+        loaded = yaml.safe_load(raw) or {}
+        return pipeline_global_set(loaded if isinstance(loaded, dict) else {})
+    except Exception:
+        return ""
 
 
 def _record_config_path(config_file: str) -> str:
@@ -124,6 +134,7 @@ def _match_initial_files(config: dict) -> list:
 
 def _print_dry_run(config_file, global_config, global_set, set_values, debug):
     """打印初始加载匹配结果, 不导入"""
+    global_set = global_set or ("" if global_config else _default_global_set_from_pipeline(config_file))
     variables, global_info = _global_context(global_config, global_set, set_values)
     raw = Path(config_file).read_text()
     processed = replace_in_text(raw, variables)
@@ -175,6 +186,7 @@ def run(config_file, global_config, global_set, set_values, debug, dry_run, fres
         return
 
     # 读取变量定义
+    global_set = global_set or ("" if global_config else _default_global_set_from_pipeline(config_file))
     variables, global_info = _global_context(global_config, global_set, set_values)
 
     # 处理主配置

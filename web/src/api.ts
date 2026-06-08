@@ -68,6 +68,8 @@ export type PipelineDetail = PipelineSummary & {
   config: Record<string, unknown>;
   yaml: string;
   globals: Record<string, string>;
+  globalSet?: string;
+  declaredVariables?: string[];
   usedVariables?: string[];
   graph: {
     nodes: GraphNode[];
@@ -101,6 +103,31 @@ export type PipelineResolveResult = {
     scope?: string;
     values: Record<string, string>;
   };
+};
+
+export type GlobalSetAffectedPipeline = {
+  path: string;
+  variables: string[];
+  globalSet?: string;
+  outputCount: number;
+  outputs: string[];
+};
+
+export type GlobalSetRegenerateResult = {
+  ok: boolean;
+  globalSet: string;
+  affectedPipelines: number;
+  affectedOutputs: number;
+  ranPipelines: number;
+  results: Array<{
+    path: string;
+    ok: boolean;
+    returnCode: number;
+    summary: string;
+    stdout: string;
+    stderr: string;
+    outputs: string[];
+  }>;
 };
 
 export type Processor = {
@@ -383,7 +410,13 @@ export const api = {
   duplicateGlobalSet: (experiment: string, source: string, target: string) =>
     sendJson<GlobalSetDetail>(`/api/experiments/${experiment}/globals/${source}/duplicate`, "POST", { target }),
   affectedByGlobalSet: (experiment: string, name: string) =>
-    request<Array<{ path: string; variables: string[] }>>(`/api/experiments/${experiment}/globals/${name}/affected`),
+    request<GlobalSetAffectedPipeline[]>(`/api/experiments/${experiment}/globals/${name}/affected`),
+  regenerateGlobalSet: (experiment: string, name: string, sourceMode = "version", forceFresh = false) =>
+    sendJson<GlobalSetRegenerateResult>(
+      `/api/experiments/${experiment}/globals/${name}/regenerate`,
+      "POST",
+      { source_mode: sourceMode, force_fresh: forceFresh }
+    ),
   resolvePipeline: (experiment: string, path: string, globalSet?: string) =>
     sendJson<PipelineResolveResult>(
       `/api/pipelines/${path}/resolve?experiment=${encodeURIComponent(experiment)}`,

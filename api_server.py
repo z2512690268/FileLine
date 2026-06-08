@@ -31,12 +31,15 @@ from sqlalchemy.orm import selectinload
 import processes  # noqa: F401 - register built-in processors
 from core.base import experiment_manager, get_session, init_db
 from core.global_sets import (
+    declared_global_variables,
     duplicate_global_set,
     global_set_affected,
     legacy_global_candidates,
     list_global_sets,
     load_global_values,
     parse_global_set_text,
+    pipeline_global_set,
+    pipeline_required_variables,
     read_global_set,
     resolve_text,
     save_global_set,
@@ -102,6 +105,12 @@ class GlobalSetSaveRequest(BaseModel):
 
 class GlobalSetDuplicateRequest(BaseModel):
     target: str
+
+
+class GlobalSetRegenerateRequest(BaseModel):
+    source_mode: str = "version"
+    force_fresh: bool = False
+    limit: int | None = None
 
 
 class PipelineResolveRequest(BaseModel):
@@ -1459,6 +1468,23 @@ def list_pipelines() -> list[dict[str, Any]]:
     return [_pipeline_summary(path) for path in paths]
 
 
+@app.get("/api/globals")
+def global_sets(experiment: str | None = None) -> list[dict[str, Any]]:
+    context = experiment_context(experiment) if experiment else nullcontext()
+    with context:
+        return list_global_sets(experiment)
+
+
+@app.get("/api/globals/{set_name}")
+def global_set(set_name: str, experiment: str | None = None) -> dict[str, Any]:
+    context = experiment_context(experiment) if experiment else nullcontext()
+    with context:
+        try:
+            return read_global_set(set_name, experiment)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Global set not found") from exc
+
+
 @app.get("/api/experiments/{name}/globals")
 def experiment_global_sets(name: str) -> list[dict[str, Any]]:
     with experiment_context(name):
@@ -1511,17 +1537,102 @@ def affected_by_global_set(name: str, set_name: str) -> list[dict[str, Any]]:
             raise HTTPException(status_code=404, detail="Global set not found") from exc
 
 
+@app.post("/api/experiments/{name}/globals/{set_name}/regenerate")
+def regenerate_affected_outputs(name: str, set_name: str, payload: GlobalSetRegenerateRequest) -> dict[str, Any]:
+    if payload.source_mode not in {"version", "raw", "external", "auto"}:
+        raise HTTPException(status_code=400, detail="source_mode must be version, raw, external, or auto")
+    with experiment_context(name):
+        try:
+            affected = global_set_affected(set_name, name)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Global set not found") from exc
+
+    targets = affected[: payload.limit] if payload.limit else affected
+    results: list[dict[str, Any]] = []
+    for item in targets:
+        pipeline_rel_path = item["path"]
+        path = _pipeline_path_from_rel(pipeline_rel_path)
+        command = [
+            sys.executable,
+            "main.py",
+            "--experiment",
+            name,
+            "pipeline",
+            "run",
+            str(path),
+            "--debug",
+            "--global-set",
+            set_name,
+            "--source-mode",
+            payload.source_mode,
+        ]
+        if payload.force_fresh:
+            command.append("--fresh-scope")
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                run_env = {
+                    **os.environ,
+                    "PYTHONUNBUFFERED": "1",
+                    "TMPDIR": tmpdir,
+                    "FILELINE_PIPELINE_PATH": pipeline_rel_path,
+                    "FILELINE_SOURCE_MODE": payload.source_mode,
+                }
+                result = subprocess.run(
+                    command,
+                    cwd=PROJECT_ROOT,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=900,
+                    env=run_env,
+                )
+        except Exception as exc:
+            results.append({
+                "path": pipeline_rel_path,
+                "ok": False,
+                "returnCode": -1,
+                "summary": str(exc),
+                "stdout": "",
+                "stderr": str(exc),
+                "outputs": item.get("outputs", []),
+            })
+            continue
+        feedback = _parse_run_feedback(result.stdout, result.stderr) if result.returncode != 0 else {}
+        results.append({
+            "path": pipeline_rel_path,
+            "ok": result.returncode == 0,
+            "returnCode": result.returncode,
+            "summary": feedback.get("summary", "Regenerated") if result.returncode != 0 else "Regenerated",
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "outputs": item.get("outputs", []),
+        })
+    return {
+        "ok": all(item["ok"] for item in results),
+        "globalSet": set_name,
+        "affectedPipelines": len(affected),
+        "affectedOutputs": sum(item.get("outputCount", 0) for item in affected),
+        "ranPipelines": len(results),
+        "results": results,
+    }
+
+
 @app.get("/api/pipelines/{pipeline_path:path}")
 def get_pipeline(pipeline_path: str) -> dict[str, Any]:
     path = _pipeline_path_from_rel(pipeline_path)
     raw_text = path.read_text(encoding="utf-8")
     config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    declared = declared_global_variables(config)
+    required = pipeline_required_variables(raw_text, config)
     return {
         **_pipeline_summary(path),
         "config": config,
         "yaml": raw_text,
         "globals": _load_global_file(path),
-        "usedVariables": used_variables(raw_text),
+        "globalSet": pipeline_global_set(config),
+        "declaredVariables": declared,
+        "usedVariables": required,
         "graph": _pipeline_graph(config),
     }
 
@@ -1535,10 +1646,11 @@ def resolve_pipeline(pipeline_path: str, payload: PipelineResolveRequest, experi
     exp_name = experiment or experiment_manager.current_experiment
     context = experiment_context(exp_name) if exp_name else nullcontext()
     with context:
-        if payload.global_set:
+        selected_global_set = payload.global_set or pipeline_global_set(yaml.safe_load(text) or {})
+        if selected_global_set:
             try:
                 values, info = load_global_values(
-                    global_set=payload.global_set,
+                    global_set=selected_global_set,
                     overrides=payload.overrides or {},
                     experiment=exp_name,
                 )
@@ -1719,8 +1831,16 @@ def run_pipeline(
         str(command_path),
         "--debug",
     ]
-    if global_set:
-        command.extend(["--global-set", global_set])
+    selected_global_set = global_set
+    if not selected_global_set:
+        try:
+            loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            selected_global_set = pipeline_global_set(loaded)
+        except Exception:
+            selected_global_set = ""
+
+    if selected_global_set:
+        command.extend(["--global-set", selected_global_set])
     else:
         global_path = _find_global_file(path)
         if global_path:
@@ -1747,6 +1867,8 @@ def run_pipeline(
                 cwd=PROJECT_ROOT,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=900,
                 env=run_env,
             )
