@@ -498,7 +498,7 @@ class PipelineRunner:
                 else:
                     entry = self.storage.store_raw_data(file_path, self.session)
                     entry.type = config.data_type
-                    entry.description = f"自动加载自: {file_path}"
+                    entry.description = f"Loaded source: {file_path}"
                     # 远程文件: original_path 存 remote URI, 便于 source_mode=raw 匹配
                     if spec.remote:
                         entry.original_path = f"{spec.remote.rstrip('/')}/{Path(file_path).name}"

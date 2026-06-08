@@ -620,6 +620,10 @@ select {
   margin-top: 2px;
 }
 
+.create-field-details .chart-setup-grid {
+  margin: 10px;
+}
+
 .create-preview-details .auto-plan-fields,
 .create-preview-details .compact-table-preview {
   margin: 10px;
@@ -1387,6 +1391,21 @@ select {
   text-align: right;
   color: #334155;
   font-size: 13px;
+}
+
+.cleanup-header-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  background: #fff7f7;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .danger-button {

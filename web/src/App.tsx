@@ -282,6 +282,21 @@ function sourceSummaryFromNodes(nodes: GraphNode[]) {
   return `Sources: ${labels.slice(0, 2).join(", ")}${labels.length > 2 ? ` +${labels.length - 2}` : ""}`;
 }
 
+function displayDescription(entry: Entry | null | undefined) {
+  const raw = entry?.description || "";
+  if (!raw) return "";
+  const sourcePrefixes = ["自动加载自:", "鑷姩鍔犺浇鑷?", "鑷姩鍔犺浇鑷?"];
+  const matchedPrefix = sourcePrefixes.find((prefix) => raw.startsWith(prefix));
+  if (matchedPrefix) {
+    const loadedPath = raw.slice(matchedPrefix.length).trim();
+    return `Loaded source: ${loadedPath || entry?.path || entry?.originalPath || entry?.fileName || "input"}`;
+  }
+  if (entry?.type === "raw" && (raw.includes("自动加载") || raw.includes("鑷") || raw.includes("鍔犺浇"))) {
+    return `Loaded source: ${entry.path || entry.originalPath || entry.fileName || "input"}`;
+  }
+  return raw;
+}
+
 export function App() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [pipelines, setPipelines] = useState<PipelineSummary[]>([]);
@@ -703,9 +718,9 @@ export function App() {
             <p className="eyebrow">{selectedExperiment || "No experiment"}</p>
             <h2>{viewTitle(view)}</h2>
           </div>
-          {view !== "home" && (
+          {view !== "home" && view !== "create" && (
             <button className="topbar-cta" onClick={() => setView("create")}>
-              <Wand2 size={15} /> New figure
+              <Wand2 size={15} /> Create figure
             </button>
           )}
         </header>
@@ -871,14 +886,14 @@ function HomeView({
   const recentResults = exports.slice(0, 3);
   const dataCount = entries.length;
   const primaryAction = exports.length
-    ? { label: "View figures", icon: <ImageIcon size={17} />, view: "data" as View }
+    ? { label: "View outputs", icon: <ImageIcon size={17} />, view: "data" as View }
     : dataCount
       ? { label: "Run recommended pipeline", icon: <Play size={17} />, view: "workbench" as View }
       : { label: "Add data to start", icon: <Upload size={17} />, view: "create" as View };
   const statusText = exports.length
     ? `${exports.length} result${exports.length === 1 ? "" : "s"} ready to inspect.`
     : dataCount
-      ? `${dataCount} data file${dataCount === 1 ? "" : "s"} available. Run a pipeline to create a figure.`
+      ? `${dataCount} data file${dataCount === 1 ? "" : "s"} available. Run a pipeline to create an output.`
       : "This experiment has no data yet. Add a table or source pattern to start.";
   const suggested = currentExperimentPipelines(pipelines, experiment)
     .filter((item) => item.exportCount > 0 || item.processors.some((name) => name.includes("plot")))
@@ -907,7 +922,7 @@ function HomeView({
             <h3>Recent outputs</h3>
             <p>{experiment || "No experiment selected"}</p>
           </div>
-          {recentResults.length > 0 && <button className="compact-action" onClick={() => setView("data")}><Eye size={15} /> Open all in Data</button>}
+          {recentResults.length > 0 && <button className="compact-action" onClick={() => setView("data")}><Eye size={15} /> Open all outputs</button>}
         </div>
         <div className="result-card-grid">
           {recentResults.length > 0 ? recentResults.map((item) => (
@@ -917,7 +932,7 @@ function HomeView({
               <div className="result-card-icon"><FileBarChart size={18} /></div>
               <strong>{item.name}</strong>
               <span>ID {item.entryId}  -  {shortDate(item.createdAt)}</span>
-              <em>Open in Data</em>
+              <em>Open output</em>
             </button>
           )) : (
             <div className="friendly-empty home-empty">
@@ -1256,42 +1271,6 @@ function CreateFigureView({
                 </div>
                 <small>{chartPlan.confidence} confidence</small>
               </div>
-              <div className="chart-setup-grid">
-                <label className="chart-setup-field title-field">
-                  <span>Chart title</span>
-                  <input value={chartSetup.title || ""} onChange={(event) => updateChartSetup({ title: event.target.value })} placeholder="Figure title" />
-                </label>
-                <label className="chart-setup-field">
-                  <span>Chart type</span>
-                  <select value={chartSetup.chartType || chartPlan.chartType || "line"} onChange={(event) => updateChartSetup({ chartType: event.target.value })}>
-                    <option value="line">Line</option>
-                    <option value="bar">Bar</option>
-                    <option value="grouped_bar">Grouped bar</option>
-                    <option value="horizontal_bar">Horizontal bar</option>
-                  </select>
-                </label>
-                <label className="chart-setup-field">
-                  <span>X axis</span>
-                  <select value={chartSetup.xCol || ""} onChange={(event) => updateChartSetup({ xCol: event.target.value })}>
-                    <option value="">Auto</option>
-                    {chartColumns.map((column) => <option key={column} value={column}>{column}</option>)}
-                  </select>
-                </label>
-                <label className="chart-setup-field">
-                  <span>Y / value</span>
-                  <select value={chartSetup.yCol || ""} onChange={(event) => updateChartSetup({ yCol: event.target.value })}>
-                    <option value="">Auto</option>
-                    {numericChartColumns.map((column) => <option key={column} value={column}>{column}</option>)}
-                  </select>
-                </label>
-                <label className="chart-setup-field">
-                  <span>Group by</span>
-                  <select value={chartSetup.groupCol || ""} onChange={(event) => updateChartSetup({ groupCol: event.target.value })}>
-                    <option value="">None</option>
-                    {chartColumns.map((column) => <option key={column} value={column}>{column}</option>)}
-                  </select>
-                </label>
-              </div>
               <div className="auto-plan-columns compact">
                 {chartPlan.columns.slice(0, 4).map((column) => (
                   <div key={column.name} className="auto-column-chip">
@@ -1300,8 +1279,47 @@ function CreateFigureView({
                   </div>
                 ))}
               </div>
+              <details className="advanced-block create-field-details">
+                <summary><SlidersHorizontal size={15} /> Adjust fields</summary>
+                <div className="chart-setup-grid">
+                  <label className="chart-setup-field title-field">
+                    <span>Output title</span>
+                    <input value={chartSetup.title || ""} onChange={(event) => updateChartSetup({ title: event.target.value })} placeholder="Output title" />
+                  </label>
+                  <label className="chart-setup-field">
+                    <span>Output type</span>
+                    <select value={chartSetup.chartType || chartPlan.chartType || "line"} onChange={(event) => updateChartSetup({ chartType: event.target.value })}>
+                      <option value="line">Line</option>
+                      <option value="bar">Bar</option>
+                      <option value="grouped_bar">Grouped bar</option>
+                      <option value="horizontal_bar">Horizontal bar</option>
+                    </select>
+                  </label>
+                  <label className="chart-setup-field">
+                    <span>X axis</span>
+                    <select value={chartSetup.xCol || ""} onChange={(event) => updateChartSetup({ xCol: event.target.value })}>
+                      <option value="">Auto</option>
+                      {chartColumns.map((column) => <option key={column} value={column}>{column}</option>)}
+                    </select>
+                  </label>
+                  <label className="chart-setup-field">
+                    <span>Y / value</span>
+                    <select value={chartSetup.yCol || ""} onChange={(event) => updateChartSetup({ yCol: event.target.value })}>
+                      <option value="">Auto</option>
+                      {numericChartColumns.map((column) => <option key={column} value={column}>{column}</option>)}
+                    </select>
+                  </label>
+                  <label className="chart-setup-field">
+                    <span>Group by</span>
+                    <select value={chartSetup.groupCol || ""} onChange={(event) => updateChartSetup({ groupCol: event.target.value })}>
+                      <option value="">None</option>
+                      {chartColumns.map((column) => <option key={column} value={column}>{column}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </details>
               <details className="advanced-block create-preview-details">
-                <summary><Table2 size={15} /> Data preview and inferred params</summary>
+                <summary><Table2 size={15} /> Preview data</summary>
                 <div className="auto-plan-fields">
                   {Object.entries(chartPlan.params).filter(([, value]) => value !== null && value !== "").map(([key, value]) => (
                     <div key={key}>
@@ -1964,7 +1982,7 @@ function StageResultPanel({
                     <strong>{selectedNode.type === "export" ? selectedNode.label : activeEntry.fileName || `Entry ${activeEntry.id}`}</strong>
                     <span>{shortDate(activeEntry.timestamp)}</span>
                   </div>
-                  <small>{activeEntry.description || activeEntry.path}</small>
+                  <small>{displayDescription(activeEntry) || activeEntry.path}</small>
                 </div>
               )}
               {activeEntry && stagePreview && (
@@ -2354,14 +2372,14 @@ function FinalOutputSpotlight({
         </div>
         <details className="technical-details">
           <summary>Technical details</summary>
-          <p>{entry.description || "No processor details recorded."}</p>
+          <p>{displayDescription(entry) || "No processor details recorded."}</p>
         </details>
         <div className="final-output-actions">
           <a className="hero-secondary" href={api.fileUrl(experiment, entry.id)} target="_blank" rel="noreferrer">
             <Download size={15} /> Open file
           </a>
           <button className="compact-action" onClick={() => onOpenResults(entry)}>
-            <Eye size={15} /> Open in Data
+            <Eye size={15} /> Open output
           </button>
         </div>
       </div>
@@ -3870,7 +3888,7 @@ function ProcessorsView({
             <h3>Version cleanup</h3>
             <p>{selectedPipeline ? `Filtered to ${selectedPipeline.name}` : "Filtered by the selected pipeline"}</p>
           </div>
-          <Trash2 size={18} />
+          <span className="cleanup-header-label"><Trash2 size={15} /> Clean inactive versions</span>
         </div>
         <div className="cleanup-list">
           {storage?.versions.length ? storage.versions.map((version) => (
