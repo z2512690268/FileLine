@@ -1,65 +1,82 @@
 # FileLine
 
-FileLine is a reproducible data workflow and output studio for research experiments. It helps you turn raw experiment files into traceable final outputs, while keeping every source file, intermediate result, processor, pipeline version, and exported artifact connected.
+> 中文主文档。English documentation: [README.en.md](README.en.md)
 
-Use it from either side:
+FileLine 是一个面向科研实验的数据流与结果生产工具。它把原始文件、处理中间结果、最终产物、pipeline、processor、缓存和版本记录放在同一条可追溯链路里，帮助你回答一个科研项目里最常见但最麻烦的问题：
 
-- **Web UI** for browsing data, creating outputs, previewing lineage, comparing versions, and editing pipelines visually.
-- **CLI** for scripted runs, batch processing, processor testing, version switching, and automation on remote machines.
+- 这个最终产物是哪条 pipeline 生成的？
+- 它用了哪些原始数据和中间结果？
+- 当时的 processor 代码和参数是什么？
+- 能不能预览或恢复旧版本？
+- 没改任何东西时，能不能直接走缓存而不是重复生成？
 
-Both surfaces share the same experiment directory, SQLite database, processor registry, pipeline runner, cache, and version records.
+FileLine 同时支持 **Web Studio** 和 **CLI**。两者共享同一套实验目录、SQLite 数据库、processor registry、pipeline runner、缓存和版本记录，因此你可以在 Web 里浏览和调参，也可以在命令行里批量自动化。
 
-## Why FileLine
+## 适合谁
 
-Research data workflows often fail in the unglamorous middle:
+FileLine 特别适合这些场景：
 
-- raw logs, CSVs, parquet files, and custom formats accumulate quickly;
-- plotting scripts are copied, edited, and forgotten;
-- intermediate files are hard to connect back to their inputs;
-- rerunning the same processor wastes time;
-- changing a parameter can silently overwrite the result you trusted yesterday.
+- 实验输出很多，原始数据、CSV、parquet、log、PDF、图片经常混在一起。
+- 画图脚本或数据清洗脚本经常复制修改，过一段时间就忘记哪个结果来自哪个版本。
+- 希望保留中间结果和 lineage，方便论文复现、审稿补图或排查异常。
+- 希望同一套流程既能给熟练用户命令行自动化，也能给新用户 Web 界面上手。
+- 希望缓存重复处理步骤，避免相同输入、参数、processor 代码反复计算。
 
-FileLine treats every processing step as a registered processor and every pipeline run as a recoverable version. The result is a workflow where you can answer:
+## 核心能力
 
-- Which pipeline generated this output?
-- Which raw files and intermediate results led to it?
-- Which processor code and parameters were used?
-- Can I preview an older version without losing the current one?
-- Can I rerun safely from cached data or force a fresh run when needed?
+- **实验隔离**：每个 experiment 都有独立数据目录、数据库、导出结果、processor 和 pipeline 快照。
+- **Web Studio**：提供 Home、Create Figure、Pipelines、Data、Processors、Storage 页面。
+- **结果优先的数据浏览**：Data 页默认展示 Final outputs，Source inputs 和 Intermediate results 折叠在下方。
+- **Lineage 追溯**：可以从最终产物跳到源数据/中间结果，也可以从源数据回到最终产物。
+- **Pipeline DAG**：YAML pipeline 支持串联、分支、多输出和最终导出。
+- **Processor Registry**：用 Python 装饰器注册自定义处理函数。
+- **自动缓存**：输入、参数、processor 代码和 cache scope 一致时自动复用结果。
+- **版本管理**：每次有效 pipeline run 记录 PipelineVersion，可预览、对比、切换旧版本。
+- **Processor 快照**：版本记录会保存当时使用的 processor 代码快照，便于恢复。
+- **安全清理**：Storage 只允许清理非 active 版本，CLI 删除被引用数据时需要强确认。
+- **Web/CLI 兼容**：Web 运行 pipeline 时实际调用同一条 `main.py pipeline run` 路径。
 
-## Main Features
+## 界面预览
 
-- **Experiment isolation**: each experiment has its own data root, database, outputs, processors, and pipeline snapshots.
-- **Web Studio**: Home, Create Figure, Pipelines, Data, Processors, and Storage views.
-- **Output-centric Data view**: final outputs first, with source inputs and intermediate results folded below.
-- **Lineage tracing**: jump from final output to source and back again.
-- **Pipeline DAG support**: YAML pipelines can branch, merge, and export named outputs.
-- **Processor registry**: add custom Python processors with a decorator.
-- **Automatic caching**: skip repeated work when inputs, parameters, processor code, and cache scope match.
-- **Versioned runs**: compare output versions and switch a pipeline back to a previous version.
-- **Processor snapshots**: pipeline versions can restore the processor code used by that run.
-- **Safe cleanup**: version cleanup protects active versions and shared data.
-- **CLI/Web compatibility**: Web runs call the same `main.py pipeline run` path as the CLI.
+### Home：从实验状态直接进入下一步
 
-## Repository Layout
+![FileLine Home](docs/assets/readme/web-home.png)
+
+### Create Figure：选数据、看推荐、创建可编辑 pipeline
+
+![Create Figure](docs/assets/readme/web-create.png)
+
+### Pipelines：查看流程、调参数、生成结果
+
+![Pipelines](docs/assets/readme/web-pipelines.png)
+
+### Data：统一浏览最终产物、源数据、中间结果和版本
+
+![Data](docs/assets/readme/web-data.png)
+
+### Processors：创建和校验自定义 processor
+
+![Processors](docs/assets/readme/web-processors.png)
+
+## 目录结构
 
 ```text
 FileLine/
-  api_server.py                 # FastAPI server for Web UI
-  main.py                       # CLI entrypoint
-  core/                         # storage, processing, pipeline, versions
-  commands/                     # CLI command groups
-  processes/                    # built-in processors
-  FileLine-Pipelines/           # reusable pipeline YAMLs and templates
-  experiments/                  # experiment-local snapshots and processors
-  web/                          # React + Vite frontend
-  scripts/                      # web deploy/status/stop helpers
-  docs/                         # design notes and operational docs
+  api_server.py                 # FastAPI 服务，托管 API 和 Web 静态文件
+  main.py                       # CLI 入口
+  core/                         # 存储、处理、pipeline、版本核心逻辑
+  commands/                     # CLI 命令组
+  processes/                    # 内置 processors
+  FileLine-Pipelines/           # 复用 pipeline YAML 和标准模板
+  experiments/                  # experiment 本地快照和 processor
+  web/                          # React + Vite 前端
+  scripts/                      # Web 部署/状态/停止脚本
+  docs/                         # 设计文档和补充说明
 ```
 
-## Install
+## 安装
 
-Python dependencies:
+Python 依赖：
 
 ```bash
 cd FileLine
@@ -68,44 +85,44 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Web dependencies:
+Web 依赖：
 
 ```bash
 cd FileLine/web
 npm install
 ```
 
-The deployment script also runs `npm install` automatically if `web/node_modules` is missing.
+生产部署脚本会在 `web/node_modules` 不存在时自动执行 `npm install`。
 
-## Quick Start: Web UI
+## Web 快速开始
 
-Start the production-style single-process web server:
+启动单进程 Web 服务，API 和 React 静态文件由同一个 FastAPI 服务托管：
 
 ```bash
 cd FileLine
 bash scripts/deploy_fileline_web.sh
 ```
 
-Default URL:
+默认地址：
 
 ```text
 http://<server-ip>:8088
 ```
 
-Override host or port:
+修改 host 或 port：
 
 ```bash
 FILELINE_WEB_HOST=0.0.0.0 FILELINE_WEB_PORT=8090 bash scripts/deploy_fileline_web.sh
 ```
 
-Check or stop the server:
+查看状态或停止：
 
 ```bash
 bash scripts/status_fileline_web.sh
 bash scripts/stop_fileline_web.sh
 ```
 
-Development mode:
+开发模式：
 
 ```bash
 cd FileLine
@@ -115,95 +132,95 @@ cd FileLine/web
 npm run dev
 ```
 
-Then open:
+然后打开：
 
 ```text
 http://localhost:5173
 ```
 
-## Web UI Guide
+## Web 使用指南
 
 ### Home
 
-Home is the starting dashboard for the selected experiment.
+Home 是当前 experiment 的起点。
 
-- `View outputs`: open final outputs in Data.
-- `Run recommended pipeline`: continue from existing data.
-- `Add data to start`: create a source-backed pipeline.
-- `Recent outputs`: open recent exports directly.
-- Suggested pipelines: quick entry points for reusable workflows.
+- `View outputs`：直接进入 Data 查看最终产物。
+- `Run recommended pipeline`：已有数据时进入推荐流程。
+- `Add data to start`：没有数据时进入 Create Figure。
+- `Recent outputs`：打开最近导出的最终产物。
+- `Suggested pipelines`：快速进入已有 pipeline。
 
 ### Create Figure
 
-Create Figure is the guided path for new users.
+Create Figure 是给新用户的向导式入口。
 
-1. **Choose source**: select registered data, upload a file, or add a source glob.
-2. **What should FileLine make?**: choose a goal, inspect the recommended output, optionally expand `Adjust fields` or `Preview data`.
-3. **Confirm and create**: name the result and create an editable pipeline.
+1. **Choose source**：选择已登记数据、上传文件，或添加 source glob。
+2. **What should FileLine make?**：选择目标，查看推荐输出；需要时展开 `Adjust fields` 或 `Preview data`。
+3. **Confirm and create**：命名结果，创建一条可继续编辑的 pipeline。
 
-Advanced source setup and processor upload are intentionally folded so a new user can start without writing code.
+高级 source 配置和 processor 上传默认折叠，避免新用户一开始就被 YAML 或代码打断。
 
 ### Pipelines
 
-The Pipelines page is the editable workflow view.
+Pipelines 是可编辑工作流视图。
 
-- Search and open existing experiment pipelines.
-- Copy from standard templates.
-- Read a story-style pipeline summary.
-- Switch to DAG view for graph inspection.
-- Edit stage parameters without opening raw YAML.
-- Save pipeline changes.
-- Run `Check flow` for dry-run validation.
-- Run `Generate result` to produce outputs and record versions.
-- Preview stage results in a larger modal when the right panel is too narrow.
-- Open the final output in Data.
+- 搜索和打开 experiment 内已有 pipeline。
+- 从标准模板复制新 pipeline。
+- 用 story 视图理解输入、处理步骤和最终输出。
+- 切换 DAG 视图查看图结构。
+- 在 Step config 中直接编辑参数，不必打开 raw YAML。
+- 保存 pipeline 改动。
+- 用 `Check flow` dry-run 检查输入匹配和计划步骤。
+- 用 `Generate result` 生成最终产物并记录版本。
+- 右侧 stage 预览过窄时，可打开大预览。
+- 从最终输出跳回 Data，或从版本跳回对应 pipeline 版本。
 
 ### Data
 
-Data is the unified browser for files and outputs.
+Data 是统一的文件和结果浏览器。
 
-- **Final outputs**: exported results from pipelines.
-- **Intermediate results**: processed files created by stages.
-- **Source inputs**: raw files loaded into the experiment.
-- Preview PDF, images, text, CSV, and parquet-like tables.
-- Use lineage to jump from output to source/intermediate files.
-- From source/intermediate files, jump back to the final output that used them.
-- Browse output versions, preview previous/next versions, compare versions, and open the matching pipeline version.
+- **Final outputs**：pipeline 导出的最终产物。
+- **Intermediate results**：处理中间结果。
+- **Source inputs**：加载进 experiment 的源数据。
+- 支持预览 PDF、图片、文本、CSV、parquet 类表格。
+- 可以通过 lineage 从最终产物追溯到源数据和中间结果。
+- 也可以从源数据/中间结果返回使用它们的最终产物。
+- 支持浏览输出版本、预览前后版本、多版本对比、打开对应 pipeline 版本。
 
 ### Processors
 
-Processor Studio is for advanced users who need custom parsing or transformation logic.
+Processor Studio 面向需要自定义解析或转换逻辑的高级用户。
 
-- Start from a template.
-- Validate FileLine processor format.
-- Save the processor into the selected experiment.
-- Refresh processor registry for pipeline use.
+- 从模板开始写 processor。
+- 校验 FileLine processor 格式。
+- 保存到当前 experiment。
+- 刷新 processor registry 后即可在 pipeline 中使用。
 
 ### Storage
 
-Storage helps inspect disk usage and clean old versions.
+Storage 用于查看磁盘占用和清理旧版本。
 
-- Storage summary is scoped to the selected experiment and pipeline.
-- Version cleanup only deletes non-active versions.
-- Shared entries and active versions are protected.
-- Use this page for managed cleanup instead of manually deleting files.
+- Storage summary 会按当前 experiment 和选中的 pipeline 汇总。
+- Version cleanup 只允许删除非 active 版本。
+- active 版本和被其他版本共享的数据会被保护。
+- 推荐通过 Storage 清理版本，不建议手动删除 experiment 目录下的文件。
 
-## Quick Start: CLI
+## CLI 快速开始
 
-Create and use an experiment:
+创建并切换实验：
 
 ```bash
 python main.py experiment create demo --description "Demo experiment"
 python main.py experiment use demo
 ```
 
-Add a data file:
+添加数据文件：
 
 ```bash
 python main.py data add data/metrics.csv --description "training metrics"
 ```
 
-Inspect data:
+查看数据：
 
 ```bash
 python main.py data list-recent --limit 5
@@ -211,31 +228,31 @@ python main.py data show --type raw --limit 20
 python main.py data trace --id 42 --depth 5
 ```
 
-Dry-run a pipeline without creating data:
+只检查 pipeline，不写入数据：
 
 ```bash
 python main.py pipeline run FileLine-Pipelines/_templates/standard_line_chart.yaml --dry-run
 ```
 
-Run a pipeline:
+运行 pipeline：
 
 ```bash
 python main.py pipeline run FileLine-Pipelines/_templates/standard_line_chart.yaml
 ```
 
-Run with versioned data when the pipeline has an active version:
+使用当前版本保存的数据运行：
 
 ```bash
 python main.py pipeline run FileLine-Pipelines/fmrl/timeline.yaml --source-mode version
 ```
 
-Force a fresh cache scope:
+强制使用新的 cache scope：
 
 ```bash
 python main.py pipeline run FileLine-Pipelines/fmrl/timeline.yaml --fresh-scope
 ```
 
-List and switch versions:
+查看和切换版本：
 
 ```bash
 python main.py pipeline history --config-file fmrl/timeline.yaml
@@ -244,15 +261,15 @@ python main.py pipeline prev --config-file fmrl/timeline.yaml
 python main.py pipeline next --config-file fmrl/timeline.yaml
 ```
 
-Run one processor directly for testing:
+单独测试 processor：
 
 ```bash
 python main.py process run plot_line 17 -p time_col=step -p value_col=loss
 ```
 
-## CLI Reference
+## CLI 命令参考
 
-Global options:
+全局参数：
 
 ```bash
 python main.py --experiment fmrl data list-recent
@@ -282,13 +299,13 @@ python main.py data check
 python main.py data check --fix
 ```
 
-Safe delete:
+普通删除：
 
 ```bash
 python main.py data delete 123 -y
 ```
 
-If the selected data is referenced by pipeline versions, exports, or downstream lineage, FileLine refuses even with `-y`. To intentionally delete referenced data:
+如果该 DataEntry 被 pipeline version、export 或下游 lineage 引用，即使带 `-y` 也会拒绝删除。确实要强删时，必须显式传入强确认短语：
 
 ```bash
 python main.py data delete 123 \
@@ -296,7 +313,7 @@ python main.py data delete 123 \
   --confirm-referenced "DELETE REFERENCED DATA"
 ```
 
-Use this only when you understand that CLI/Web lineage, versions, or exports may lose those entries.
+只有在你确认 Web/CLI lineage、版本或导出结果可以失去这些 entry 时才这样做。
 
 ### pipeline
 
@@ -314,11 +331,11 @@ python main.py pipeline prev --config-file PIPELINE_PATH
 python main.py pipeline next --config-file PIPELINE_PATH
 ```
 
-Source modes:
+`--source-mode` 说明：
 
-- `version`: reuse the raw data saved with the current pipeline version when the pipeline snapshot is unchanged.
-- `raw`: reuse registered raw data entries.
-- `external` / `auto`: match or pull from the real source paths in YAML.
+- `version`：pipeline 快照未变化时，复用当前 pipeline 版本保存的 raw 数据。
+- `raw`：复用已登记的 raw data entries。
+- `external` / `auto`：按 YAML 中真实 source path 重新匹配或拉取。
 
 ### process
 
@@ -327,17 +344,17 @@ python main.py process run PROCESSOR_NAME INPUT_IDS
 python main.py process run PROCESSOR_NAME INPUT_IDS -p key=value -p another=value
 ```
 
-`INPUT_IDS` can be a single ID or a comma-separated list, depending on the processor input type.
+`INPUT_IDS` 可以是单个 ID，也可以是逗号分隔的多个 ID，取决于 processor 的 input type。
 
 ## Pipeline YAML
 
-A pipeline has three main parts:
+一条 pipeline 通常包含三部分：
 
-1. `initial_load`: how source files enter FileLine.
-2. `steps`: processor stages and their parameters.
-3. `final_output`: named outputs exported for users.
+1. `initial_load`：定义源文件如何进入 FileLine。
+2. `steps`：定义 processor 步骤及参数。
+3. `final_output`：定义面向用户的最终导出产物。
 
-Minimal line output:
+最小折线输出示例：
 
 ```yaml
 name: Standard line chart
@@ -370,7 +387,7 @@ final_output:
     export: training_loss.pdf
 ```
 
-Branching outputs:
+分支输出示例：
 
 ```yaml
 steps:
@@ -402,7 +419,7 @@ final_output:
     export: eval_accuracy.pdf
 ```
 
-Standard templates live in:
+标准模板位于：
 
 ```text
 FileLine-Pipelines/_templates/
@@ -417,11 +434,11 @@ FileLine-Pipelines/_templates/
   standard_branch_compare.yaml
 ```
 
-## Processor Development
+## Processor 开发
 
-Processors are regular Python functions registered with `ProcessorRegistry.register`.
+Processor 是用 `ProcessorRegistry.register` 注册的普通 Python 函数。
 
-Single-input example:
+单输入单输出示例：
 
 ```python
 from pathlib import Path
@@ -437,7 +454,7 @@ def normalize_loss(input_path: InputPath, output_path: Path, value_col: str = "l
     return f"normalized {value_col}"
 ```
 
-Multi-input example:
+多输入单输出示例：
 
 ```python
 from pathlib import Path
@@ -452,133 +469,137 @@ def concat_tables(inputs: list[InputPath], output_path: Path):
     return "concatenated tables"
 ```
 
-Where processors can live:
+Processor 可以放在：
 
-- Built-in processors: `processes/`
-- Experiment-specific processors: `experiments/<experiment>/processors/`
-- Pipeline-local processors: `<pipeline-directory>/processors/`
+- 内置目录：`processes/`
+- 实验目录：`experiments/<experiment>/processors/`
+- pipeline 本地目录：`<pipeline-directory>/processors/`
 
-Processor Studio in the Web UI can create, validate, and save experiment processors without editing files manually.
+Web 的 Processor Studio 可以创建、校验并保存 experiment processor，适合不想手动进服务器改文件的用户。
 
-## Caching and Versioning
+## 缓存与版本
 
-FileLine caches processor outputs when these inputs match:
+FileLine 会在以下信息一致时复用 processor 输出：
 
-- input data IDs and file metadata;
-- processor name and code hash;
-- processor parameters;
-- cache scope;
-- pipeline version context.
+- 输入 data IDs 和文件元信息；
+- processor 名称和代码 hash；
+- processor 参数；
+- cache scope；
+- pipeline version 上下文。
 
-A normal run reuses cached stage outputs when possible. Use `--fresh-scope` or the Web `Recompute processors` option when you intentionally want to bypass cached step outputs.
+普通运行会尽可能复用缓存。确实要绕过缓存时，可以使用：
 
-Each successful pipeline run records a `PipelineVersion` with:
+```bash
+python main.py pipeline run CONFIG_FILE --fresh-scope
+```
 
-- entry IDs produced by the run;
-- exported output ID and export name;
-- pipeline config snapshot;
-- processor snapshot;
-- result hash;
-- active/superseded status;
-- cache scope.
+或在 Web 中勾选 `Recompute processors`。
 
-If the result hash, export name, config snapshot, and processor snapshot are unchanged, FileLine reactivates the matching version instead of creating duplicate version records.
+每次有效 pipeline run 会记录一个 `PipelineVersion`，包括：
 
-## CLI and Web Compatibility
+- 本次 run 产生的 entry IDs；
+- 导出的 output ID 和 export name；
+- pipeline config snapshot；
+- processor snapshot；
+- result hash；
+- active / superseded 状态；
+- cache scope。
 
-The Web UI runs pipelines by calling the same CLI path:
+如果结果 hash、export name、config snapshot、processor snapshot 都没有变化，FileLine 会重新激活匹配版本，而不是制造重复版本。
+
+## Web 与 CLI 的兼容关系
+
+Web 运行 pipeline 时，后端实际调用同一条 CLI 执行路径：
 
 ```bash
 python main.py --experiment <name> pipeline run <pipeline.yaml>
 ```
 
-This means:
+因此：
 
-- Web-generated outputs are visible to the CLI.
-- CLI-generated versions and exports are visible in Data and Pipelines.
-- Cache reuse and version recording behave the same from both surfaces.
-- Processor snapshots and lineage are shared.
+- Web 生成的 outputs，CLI 能看到。
+- CLI 生成的 versions 和 exports，Web 的 Data 和 Pipelines 能看到。
+- 缓存复用和版本记录在两边行为一致。
+- processor snapshot 和 lineage 共享。
 
-Known concurrency limitation:
+当前已知限制：
 
-- Concurrent editing of the same pipeline YAML is currently last-writer-wins.
-- See `docs/concurrency-plan.md` for the planned revision and advisory-lock design.
+- 同一个 pipeline YAML 如果被 Web 和 CLI 同时编辑，目前仍是 last-writer-wins。
+- 并发 revision 和 advisory lock 的设计见 [docs/concurrency-plan.md](docs/concurrency-plan.md)。
 
-## Operational Safety
+## 操作安全建议
 
-Recommended habits:
+推荐习惯：
 
-- Use `pipeline run --dry-run` or Web `Check flow` before a new source pattern.
-- Prefer Storage version cleanup over manual file deletion.
-- Use `data trace --id <output>` before deleting source or intermediate data.
-- Do not edit the SQLite database directly.
-- Do not manually delete files under an experiment while Web or CLI runs are active.
+- 新 source pattern 先用 `pipeline run --dry-run` 或 Web 的 `Check flow`。
+- 用 Storage 的 version cleanup 清理旧版本，不要手动删 experiment 文件。
+- 删除数据前先用 `data trace --id <output>` 看 lineage。
+- 不要直接修改 SQLite 数据库。
+- Web 或 CLI 正在运行时，不要手动删除 experiment 目录下的文件。
 
-Destructive operations with built-in protection:
+已有保护：
 
-- Active pipeline versions cannot be deleted by Storage cleanup.
-- Version cleanup only removes entries exclusive to a deleted version.
-- `data delete` refuses referenced entries unless the exact strong confirmation phrase is supplied.
+- active pipeline version 不能被 Storage cleanup 删除。
+- version cleanup 只删除被该版本独占的 entries。
+- `data delete` 删除被引用数据时必须输入强确认短语。
 
-## Testing
+## 测试
 
-Run all tests:
+运行全量测试：
 
 ```bash
 pytest -q
 ```
 
-Run CLI tests:
+运行 CLI 测试：
 
 ```bash
 pytest -q tests/test_cli.py
 ```
 
-Build the Web UI:
+构建 Web：
 
 ```bash
 cd web
 npm run build
 ```
 
-## Troubleshooting
+## 排错
 
-Check current experiment:
+查看当前 experiment：
 
 ```bash
 python main.py experiment list
 ```
 
-Run a pipeline without writing files:
+不写入文件，只检查 pipeline：
 
 ```bash
 python main.py pipeline run path/to/pipeline.yaml --dry-run
 ```
 
-Check DB and file consistency:
+检查 DB 和磁盘文件一致性：
 
 ```bash
 python main.py data check
 python main.py data check --fix
 ```
 
-Check Web server:
+查看 Web 服务：
 
 ```bash
 bash scripts/status_fileline_web.sh
 tail -n 80 .run/fileline-web.log
 ```
 
-If the Web UI shows stale data after a CLI run, refresh the experiment or page. Both surfaces share the same database, but the browser may still hold old local state.
+如果 CLI 运行后 Web 没立即显示最新数据，刷新 experiment 或刷新页面即可。两边共享同一个数据库，但浏览器可能仍保留旧的前端状态。
 
-## Recommended Tools
+## 推荐工具
 
-For local development, these tools make inspection easier:
+- SQLite Viewer：查看 experiment 数据库。
+- Parquet Viewer / Parquet Visualizer：查看表格中间结果。
+- VS Code 或其他编辑器：编辑 pipeline YAML 和 processor。
 
-- SQLite Viewer for experiment databases.
-- Parquet Viewer or Parquet Visualizer for table outputs.
-- A Python environment with pandas, matplotlib, SQLAlchemy, FastAPI, and Uvicorn.
+## 状态
 
-## License and Status
-
-FileLine is actively evolving as a research workflow and output studio. The stable contract today is the shared CLI/Web data model, pipeline runner, cache, version records, and processor registry.
+FileLine 仍在快速演进中。当前稳定契约是：Web/CLI 共享数据模型、pipeline runner、缓存、版本记录和 processor registry。
