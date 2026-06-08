@@ -1,0 +1,31 @@
+name: style_variables_line_demo
+description: Demo pipeline for switching shared style/parameter sets.
+initial_load:
+  include:
+    - path: FileLine-Pipelines/test/versioned/trend_v3.csv
+      source: initial
+      tags:
+        - style_variables_demo
+        - line_demo
+  type: raw
+  global_tags:
+    - style_variables_demo
+steps:
+  - processor: plot_line
+    inputs: initial
+    output: styled_line
+    params:
+      time_col: epoch
+      value_col: loss
+      tag_col: run
+      title: Style Variables Demo
+      xlabel: Epoch
+      ylabel: Loss
+      figsize: ${FIG_SIZE}
+      dpi: ${FIG_DPI}
+      tag_colors: ${LINE_COLORS}
+      ylim: ${Y_LIMIT}
+    cache: true
+final_output:
+  - name: styled_line
+    export: style_variables_line_demo.pdf

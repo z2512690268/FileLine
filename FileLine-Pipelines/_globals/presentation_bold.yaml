@@ -1,0 +1,37 @@
+name: presentation_bold
+description: Strong contrast colors for slides and live demos.
+variables:
+  PRIMARY_COLOR:
+    type: color
+    value: "#0f766e"
+    description: Main series color.
+  SECONDARY_COLOR:
+    type: color
+    value: "#e11d48"
+    description: Comparison series color.
+  ACCENT_COLOR:
+    type: color
+    value: "#7c3aed"
+    description: Highlight or third series color.
+  GRID_ALPHA:
+    type: number
+    value: 0.18
+    description: Grid transparency for plot processors that expose it.
+  FIG_DPI:
+    type: number
+    value: 220
+    description: Export resolution.
+  FIG_SIZE:
+    type: tuple
+    value: [8, 4.5]
+    description: Matplotlib figsize as [width, height].
+  LINE_COLORS:
+    type: mapping
+    value:
+      A: "#0f766e"
+      B: "#e11d48"
+    description: Colors for grouped line plots.
+  Y_LIMIT:
+    type: range
+    value: [0, 1]
+    description: Y axis range for normalized metrics.

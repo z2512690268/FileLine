@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import inspect
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +30,18 @@ from sqlalchemy.orm import selectinload
 
 import processes  # noqa: F401 - register built-in processors
 from core.base import experiment_manager, get_session, init_db
+from core.global_sets import (
+    duplicate_global_set,
+    global_set_affected,
+    legacy_global_candidates,
+    list_global_sets,
+    load_global_values,
+    parse_global_set_text,
+    read_global_set,
+    resolve_text,
+    save_global_set,
+    used_variables,
+)
 from core.models import DataEntry, ExportMeta, PipelineVersion, StepCache
 from core.processing import ProcessorRegistry, load_processors_from_dir
 from core.storage import FileStorage
@@ -80,6 +92,21 @@ class AutoChartRequest(BaseModel):
 class ProcessorDraftRequest(BaseModel):
     filename: str = "custom_processor.py"
     code: str
+
+
+class GlobalSetSaveRequest(BaseModel):
+    text: str
+    description: str = ""
+    scope: str = "experiment"
+
+
+class GlobalSetDuplicateRequest(BaseModel):
+    target: str
+
+
+class PipelineResolveRequest(BaseModel):
+    global_set: str | None = None
+    overrides: dict[str, str] | None = None
 
 
 def _parse_run_feedback(stdout: str, stderr: str) -> dict[str, Any]:
@@ -793,23 +820,12 @@ def _load_global_file(yaml_path: Path) -> dict[str, str]:
     global_path = _find_global_file(yaml_path)
     if not global_path:
         return {}
-    values: dict[str, str] = {}
-    for line in global_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        values[key.strip()] = value.strip().strip("\"'")
+    values, _metadata = parse_global_set_text(global_path.read_text(encoding="utf-8"))
     return values
 
 
 def _find_global_file(yaml_path: Path) -> Path | None:
-    candidates = [
-        yaml_path.with_suffix(".global"),
-        yaml_path.parent / f"{yaml_path.parent.name}.global",
-        PIPELINES_ROOT / "plot.global",
-    ]
-    for candidate in candidates:
+    for candidate in legacy_global_candidates(yaml_path):
         if candidate.exists():
             return candidate
     return None
@@ -1225,6 +1241,8 @@ def list_versions(name: str, pipeline_path: str | None = None) -> list[dict[str,
                     "exportId": row.export_id,
                     "exportName": row.export_name or "",
                     "cacheScope": row.cache_scope or "legacy",
+                    "globalSet": getattr(row, "global_set", None) or "",
+                    "globalValuesSnapshot": getattr(row, "global_values_snapshot", None) or "",
                     "hasConfigSnapshot": bool(getattr(row, "config_snapshot", None)),
                     "hasProcessorSnapshot": bool(getattr(row, "processor_snapshot", None)),
                     "status": row.status,
@@ -1441,16 +1459,97 @@ def list_pipelines() -> list[dict[str, Any]]:
     return [_pipeline_summary(path) for path in paths]
 
 
+@app.get("/api/experiments/{name}/globals")
+def experiment_global_sets(name: str) -> list[dict[str, Any]]:
+    with experiment_context(name):
+        return list_global_sets(name)
+
+
+@app.get("/api/experiments/{name}/globals/{set_name}")
+def experiment_global_set(name: str, set_name: str) -> dict[str, Any]:
+    with experiment_context(name):
+        try:
+            return read_global_set(set_name, name)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Global set not found") from exc
+
+
+@app.put("/api/experiments/{name}/globals/{set_name}")
+def put_global_set(name: str, set_name: str, payload: GlobalSetSaveRequest) -> dict[str, Any]:
+    if payload.scope not in {"experiment", "shared"}:
+        raise HTTPException(status_code=400, detail="scope must be experiment or shared")
+    with experiment_context(name):
+        try:
+            return save_global_set(
+                set_name,
+                payload.text,
+                experiment=name,
+                description=payload.description,
+                scope=payload.scope,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid global set: {exc}") from exc
+
+
+@app.post("/api/experiments/{name}/globals/{set_name}/duplicate")
+def duplicate_experiment_global_set(name: str, set_name: str, payload: GlobalSetDuplicateRequest) -> dict[str, Any]:
+    if not payload.target.strip():
+        raise HTTPException(status_code=400, detail="Target name cannot be empty")
+    with experiment_context(name):
+        try:
+            return duplicate_global_set(set_name, payload.target, name)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Global set not found") from exc
+
+
+@app.get("/api/experiments/{name}/globals/{set_name}/affected")
+def affected_by_global_set(name: str, set_name: str) -> list[dict[str, Any]]:
+    with experiment_context(name):
+        try:
+            return global_set_affected(set_name, name)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Global set not found") from exc
+
+
 @app.get("/api/pipelines/{pipeline_path:path}")
 def get_pipeline(pipeline_path: str) -> dict[str, Any]:
     path = _pipeline_path_from_rel(pipeline_path)
+    raw_text = path.read_text(encoding="utf-8")
     config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return {
         **_pipeline_summary(path),
         "config": config,
-        "yaml": path.read_text(encoding="utf-8"),
+        "yaml": raw_text,
         "globals": _load_global_file(path),
+        "usedVariables": used_variables(raw_text),
         "graph": _pipeline_graph(config),
+    }
+
+
+@app.post("/api/pipelines/{pipeline_path:path}/resolve")
+def resolve_pipeline(pipeline_path: str, payload: PipelineResolveRequest, experiment: str | None = None) -> dict[str, Any]:
+    path = _pipeline_path_from_rel(pipeline_path)
+    text = path.read_text(encoding="utf-8")
+    values: dict[str, str] = {}
+    info: dict[str, Any] = {"source": "", "set": "", "values": {}}
+    exp_name = experiment or experiment_manager.current_experiment
+    context = experiment_context(exp_name) if exp_name else nullcontext()
+    with context:
+        if payload.global_set:
+            try:
+                values, info = load_global_values(
+                    global_set=payload.global_set,
+                    overrides=payload.overrides or {},
+                    experiment=exp_name,
+                )
+            except FileNotFoundError as exc:
+                raise HTTPException(status_code=404, detail="Global set not found") from exc
+        elif payload.overrides:
+            values, info = load_global_values(overrides=payload.overrides, experiment=exp_name)
+    result = resolve_text(text, values)
+    return {
+        **result,
+        "globalInfo": info,
     }
 
 
@@ -1590,6 +1689,7 @@ def run_pipeline(
     dry_run: bool = False,
     force_fresh: bool = False,
     source_mode: str | None = None,
+    global_set: str | None = None,
 ) -> dict[str, Any]:
     if source_mode not in {None, "", "version", "raw", "external", "auto"}:
         raise HTTPException(status_code=400, detail="source_mode must be version, raw, external, or auto")
@@ -1619,9 +1719,12 @@ def run_pipeline(
         str(command_path),
         "--debug",
     ]
-    global_path = _find_global_file(path)
-    if global_path:
-        command.extend(["--global-config", str(global_path)])
+    if global_set:
+        command.extend(["--global-set", global_set])
+    else:
+        global_path = _find_global_file(path)
+        if global_path:
+            command.extend(["--global-config", str(global_path)])
     if dry_run:
         command.append("--dry-run")
     if force_fresh and not dry_run:

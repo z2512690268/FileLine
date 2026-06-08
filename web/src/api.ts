@@ -68,9 +68,38 @@ export type PipelineDetail = PipelineSummary & {
   config: Record<string, unknown>;
   yaml: string;
   globals: Record<string, string>;
+  usedVariables?: string[];
   graph: {
     nodes: GraphNode[];
     edges: GraphEdge[];
+  };
+};
+
+export type GlobalSetSummary = {
+  id: string;
+  name: string;
+  description: string;
+  scope: "shared" | "experiment" | string;
+  path: string;
+  values: Record<string, string>;
+  variableCount: number;
+};
+
+export type GlobalSetDetail = GlobalSetSummary & {
+  text: string;
+  metadata: Record<string, unknown>;
+};
+
+export type PipelineResolveResult = {
+  resolvedText: string;
+  used: Record<string, string>;
+  usedVariables: string[];
+  missing: string[];
+  globalInfo: {
+    source: string;
+    set: string;
+    scope?: string;
+    values: Record<string, string>;
   };
 };
 
@@ -132,6 +161,8 @@ export type Version = {
   exportId: number | null;
   exportName: string;
   cacheScope?: string;
+  globalSet?: string;
+  globalValuesSnapshot?: string;
   hasConfigSnapshot?: boolean;
   status: string;
 };
@@ -345,6 +376,20 @@ export const api = {
     `/api/experiments/${experiment}/entries/${entryId}/file`,
   pipelines: () => request<PipelineSummary[]>("/api/pipelines"),
   pipeline: (path: string) => request<PipelineDetail>(`/api/pipelines/${path}`),
+  globalSets: (experiment: string) => request<GlobalSetSummary[]>(`/api/experiments/${experiment}/globals`),
+  globalSet: (experiment: string, name: string) => request<GlobalSetDetail>(`/api/experiments/${experiment}/globals/${name}`),
+  saveGlobalSet: (experiment: string, name: string, text: string, scope = "experiment") =>
+    sendJson<GlobalSetDetail>(`/api/experiments/${experiment}/globals/${name}`, "PUT", { text, scope }),
+  duplicateGlobalSet: (experiment: string, source: string, target: string) =>
+    sendJson<GlobalSetDetail>(`/api/experiments/${experiment}/globals/${source}/duplicate`, "POST", { target }),
+  affectedByGlobalSet: (experiment: string, name: string) =>
+    request<Array<{ path: string; variables: string[] }>>(`/api/experiments/${experiment}/globals/${name}/affected`),
+  resolvePipeline: (experiment: string, path: string, globalSet?: string) =>
+    sendJson<PipelineResolveResult>(
+      `/api/pipelines/${path}/resolve?experiment=${encodeURIComponent(experiment)}`,
+      "POST",
+      { global_set: globalSet || null }
+    ),
   clonePipeline: (sourcePath: string, name: string, experiment?: string, dataEntryId?: number, sourceSpec?: SourceSpec) =>
     sendJson<PipelineDetail>("/api/pipelines/clone", "POST", {
       source_path: sourcePath,
@@ -370,9 +415,9 @@ export const api = {
     sendJson<PipelineDetail>(`/api/pipelines/${path}`, "PUT", { yaml_text: yamlText }),
   renamePipeline: (path: string, name: string, experiment?: string) =>
     sendJson<PipelineDetail>(`/api/pipelines/${path}/rename`, "POST", { name, experiment }),
-  runPipeline: (experiment: string, path: string, dryRun: boolean, forceFresh = false, sourceMode = "") =>
+  runPipeline: (experiment: string, path: string, dryRun: boolean, forceFresh = false, sourceMode = "", globalSet = "") =>
     mutate<PipelineRunResult>(
-      `/api/experiments/${experiment}/pipelines/${path}/run?dry_run=${dryRun ? "true" : "false"}&force_fresh=${forceFresh ? "true" : "false"}${sourceMode ? `&source_mode=${encodeURIComponent(sourceMode)}` : ""}`
+      `/api/experiments/${experiment}/pipelines/${path}/run?dry_run=${dryRun ? "true" : "false"}&force_fresh=${forceFresh ? "true" : "false"}${sourceMode ? `&source_mode=${encodeURIComponent(sourceMode)}` : ""}${globalSet ? `&global_set=${encodeURIComponent(globalSet)}` : ""}`
     ),
   processors: (experiment?: string) => request<Processor[]>(`/api/processors${experiment ? `?experiment=${encodeURIComponent(experiment)}` : ""}`),
   processorTemplates: () => request<ProcessorTemplate[]>("/api/processors/templates"),

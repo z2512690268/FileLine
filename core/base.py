@@ -54,6 +54,8 @@ def init_db():
                     "ALTER TABLE pipeline_versions ADD COLUMN cache_scope VARCHAR(64)",
                     "ALTER TABLE pipeline_versions ADD COLUMN config_snapshot TEXT",
                     "ALTER TABLE pipeline_versions ADD COLUMN processor_snapshot TEXT",
+                    "ALTER TABLE pipeline_versions ADD COLUMN global_set VARCHAR(128)",
+                    "ALTER TABLE pipeline_versions ADD COLUMN global_values_snapshot TEXT",
                     "ALTER TABLE pipeline_versions ADD COLUMN result_hash VARCHAR(64)",
                 ]:
                     try:

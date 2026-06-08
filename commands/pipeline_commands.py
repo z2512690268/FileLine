@@ -1,5 +1,6 @@
 # commands/pipeline_commands.py
 import inspect
+import json
 import os
 import click
 import yaml
@@ -10,6 +11,12 @@ from core.pipeline import PipelineRunner, PipelineStep, InitialLoadConfig, Inclu
 from core.storage import FileStorage
 from core.models import DataEntry, Tag
 from core.base import get_session, experiment_manager
+from core.global_sets import (
+    load_global_values,
+    parse_legacy_global_text,
+    replace_in_text as replace_global_text,
+    used_variables,
+)
 
 @click.group()
 def pipeline():
@@ -18,32 +25,46 @@ def pipeline():
 
 def parse_simple_config(config_text: str) -> dict:
     """解析 key=value 格式的配置文本"""
-    config = {}
-    for line in config_text.splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            key, value = line.split("=", 1)
-            config[key.strip()] = value.strip()
-    return config
+    return parse_legacy_global_text(config_text)
 
 def replace_in_text(content: str, variables: dict) -> str:
     """带严格模式检查的文本替换"""
-    pattern = re.compile(r"\$\{([A-Z0-9_]+)\}")  # 严格匹配大写变量
-
-    def replacer(match):
-        var_name = match.group(1)
-        return variables.get(var_name, match.group(0))  # 保留未替换的原始格式
-
-    return pattern.sub(replacer, content)
+    return replace_global_text(content, variables)
 
 def validate_placeholders(content: str):
     """检查未替换的占位符"""
-    remaining = set(re.findall(r"\$\{([A-Z0-9_]+)\}", content))
+    remaining = set(used_variables(content))
     if remaining:
         raise click.UsageError(
             f"发现未替换的配置变量: {', '.join(remaining)}\n"
-            "解决方案：使用 --global-config 指定全局配置文件, 并确保所有待替换变量都在其中。\n"
+            "解决方案：使用 --global-set 或 --global-config 指定变量组, 并确保所有待替换变量都在其中。\n"
         )
+
+
+def _parse_override_options(pairs: tuple[str, ...]) -> dict[str, str]:
+    overrides: dict[str, str] = {}
+    for item in pairs or ():
+        if "=" not in item:
+            raise click.UsageError("--set 需要 KEY=value 格式")
+        key, value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise click.UsageError("--set 的变量名不能为空")
+        overrides[key] = value.strip()
+    return overrides
+
+
+def _global_context(global_config: str | None, global_set: str | None, set_values: tuple[str, ...]):
+    if global_config and global_set:
+        raise click.UsageError("--global-config 和 --global-set 只能选择一种")
+    overrides = _parse_override_options(set_values)
+    values, info = load_global_values(
+        global_set=global_set,
+        global_config=global_config,
+        overrides=overrides,
+        experiment=experiment_manager.current_experiment,
+    )
+    return values, info
 
 
 def _record_config_path(config_file: str) -> str:
@@ -101,11 +122,9 @@ def _match_initial_files(config: dict) -> list:
     return results
 
 
-def _print_dry_run(config_file, global_config, debug):
+def _print_dry_run(config_file, global_config, global_set, set_values, debug):
     """打印初始加载匹配结果, 不导入"""
-    variables = {}
-    if global_config:
-        variables = parse_simple_config(Path(global_config).read_text())
+    variables, global_info = _global_context(global_config, global_set, set_values)
     raw = Path(config_file).read_text()
     processed = replace_in_text(raw, variables)
     validate_placeholders(processed)
@@ -113,6 +132,8 @@ def _print_dry_run(config_file, global_config, debug):
 
     inc = config["initial_load"]["include"]
     click.echo(f"═══ Dry-Run: {config_file} ═══")
+    if global_info.get("set") or global_info.get("source"):
+        click.echo(f"  变量组: {global_info.get('set') or Path(global_info.get('source', '')).name}")
     click.echo(f"  包含模式 ({len(inc)} 个):")
     for i, p in enumerate(inc):
         extra = []
@@ -140,22 +161,21 @@ def _print_dry_run(config_file, global_config, debug):
 @click.argument("config_file")
 @click.option("--global-config", type=click.Path(exists=True),
              help="全局配置文件路径（包含变量定义）")
+@click.option("--global-set", "global_set", help="使用 FileLine 全局变量组/样式预设")
+@click.option("--set", "set_values", multiple=True, help="临时覆盖变量, 格式 KEY=value，可重复")
 @click.option("--debug/--no-debug", default=True)
 @click.option("--dry-run", is_flag=True, help="仅预览匹配文件, 不导入不执行")
 @click.option("--fresh-scope", is_flag=True, help="为本次运行创建新的缓存作用域")
 @click.option("--source-mode", type=click.Choice(["version", "raw", "external", "auto"]), default=None,
               help="本次运行的数据源模式: version=复用当前pipeline版本的raw数据, raw=复用已登记raw数据, external/auto=按YAML真实源重新匹配/拉取")
-def run(config_file, global_config, debug, dry_run, fresh_scope, source_mode):
+def run(config_file, global_config, global_set, set_values, debug, dry_run, fresh_scope, source_mode):
     """运行带文件加载的流水线"""
     if dry_run:
-        _print_dry_run(config_file, global_config, debug)
+        _print_dry_run(config_file, global_config, global_set, set_values, debug)
         return
 
     # 读取变量定义
-    variables = {}
-    if global_config:
-        var_text = Path(global_config).read_text()
-        variables = parse_simple_config(var_text)
+    variables, global_info = _global_context(global_config, global_set, set_values)
 
     # 处理主配置
     raw_config = Path(config_file).read_text()
@@ -268,8 +288,10 @@ def run(config_file, global_config, debug, dry_run, fresh_scope, source_mode):
                         click.echo(f"  导出到: {export_path}")
                         return
         previous_source_override = os.environ.get("FILELINE_SOURCE_MODE")
+        previous_pipeline_path = os.environ.get("FILELINE_PIPELINE_PATH")
         if source_mode:
             os.environ["FILELINE_SOURCE_MODE"] = source_mode
+        os.environ["FILELINE_PIPELINE_PATH"] = record_config
         runner = PipelineRunner(FileStorage(), session, cache_scope=run_cache_scope)
         try:
             result = runner.execute(load_config, steps, debug)
@@ -278,6 +300,10 @@ def run(config_file, global_config, debug, dry_run, fresh_scope, source_mode):
                 os.environ.pop("FILELINE_SOURCE_MODE", None)
             else:
                 os.environ["FILELINE_SOURCE_MODE"] = previous_source_override
+            if previous_pipeline_path is None:
+                os.environ.pop("FILELINE_PIPELINE_PATH", None)
+            else:
+                os.environ["FILELINE_PIPELINE_PATH"] = previous_pipeline_path
          # 处理所有最终输出配置
         final_outputs = config.get("final_output", [])
         for output_config in final_outputs:
@@ -320,7 +346,9 @@ def run(config_file, global_config, debug, dry_run, fresh_scope, source_mode):
                                  export_id=export_id, export_name=export_name,
                                  cache_scope=run_cache_scope,
                                  config_snapshot=processed_config,
-                                 processor_snapshot=processor_snapshot)
+                                 processor_snapshot=processor_snapshot,
+                                 global_set=global_info.get("set", ""),
+                                 global_values_snapshot=json.dumps(global_info, ensure_ascii=False, sort_keys=True))
             click.echo(f"  版本 #{vid} 已记录")
             # 执行成功后设置 source_mode=raw: 后续自动用缓存数据
             exps = experiment_manager.get_experiments()

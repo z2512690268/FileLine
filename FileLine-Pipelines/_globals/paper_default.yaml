@@ -1,0 +1,37 @@
+name: paper_default
+description: Balanced colors and export defaults for paper figures.
+variables:
+  PRIMARY_COLOR:
+    type: color
+    value: "#2563eb"
+    description: Main series color.
+  SECONDARY_COLOR:
+    type: color
+    value: "#f97316"
+    description: Comparison series color.
+  ACCENT_COLOR:
+    type: color
+    value: "#14b8a6"
+    description: Highlight or third series color.
+  GRID_ALPHA:
+    type: number
+    value: 0.25
+    description: Grid transparency for plot processors that expose it.
+  FIG_DPI:
+    type: number
+    value: 300
+    description: Export resolution.
+  FIG_SIZE:
+    type: tuple
+    value: [7, 4]
+    description: Matplotlib figsize as [width, height].
+  LINE_COLORS:
+    type: mapping
+    value:
+      A: "#2563eb"
+      B: "#f97316"
+    description: Colors for grouped line plots.
+  Y_LIMIT:
+    type: range
+    value: [0, 1]
+    description: Y axis range for normalized metrics.

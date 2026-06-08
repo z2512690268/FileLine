@@ -18,7 +18,9 @@ class PipelineVersionManager:
                    export_name: str = "",
                    cache_scope: Optional[str] = None,
                    config_snapshot: Optional[str] = None,
-                   processor_snapshot: Optional[str] = None) -> int:
+                   processor_snapshot: Optional[str] = None,
+                   global_set: Optional[str] = None,
+                   global_values_snapshot: Optional[str] = None) -> int:
         """记录一次管道运行, 返回版本 ID"""
         from .models import PipelineVersion, DataEntry
         with get_session() as session:
@@ -42,6 +44,8 @@ class PipelineVersionManager:
                         if other.id != row.id and (other.status or "") == "active":
                             other.status = "superseded"
                     row.status = "active"
+                    row.global_set = global_set
+                    row.global_values_snapshot = global_values_snapshot
                     session.commit()
                     return row.id
             active = [row for row in matching_versions if (row.status or "") == "active"]
@@ -57,6 +61,8 @@ class PipelineVersionManager:
                 cache_scope=cache_scope,
                 config_snapshot=config_snapshot,
                 processor_snapshot=processor_snapshot,
+                global_set=global_set,
+                global_values_snapshot=global_values_snapshot,
                 result_hash=result_hash,
                 status="active",
             )
@@ -307,6 +313,8 @@ class PipelineVersionManager:
             "cache_scope": row.cache_scope or DEFAULT_CACHE_SCOPE,
             "config_snapshot": row.config_snapshot or "",
             "processor_snapshot": getattr(row, "processor_snapshot", None) or "",
+            "global_set": getattr(row, "global_set", None) or "",
+            "global_values_snapshot": getattr(row, "global_values_snapshot", None) or "",
             "result_hash": row.result_hash or "",
             "status": row.status or "",
         }

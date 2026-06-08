@@ -47,9 +47,12 @@ import {
   Entry,
   Experiment,
   ExportItem,
+  GlobalSetDetail,
+  GlobalSetSummary,
   GraphNode,
   Lineage,
   PipelineDetail,
+  PipelineResolveResult,
   PipelineRunResult,
   PipelineSummary,
   Preview,
@@ -205,6 +208,14 @@ function curatedPipelines(pipelines: PipelineSummary[], experiment: string, goal
     .sort((a, b) => b.score - a.score || b.pipeline.exportCount - a.pipeline.exportCount || a.pipeline.name.localeCompare(b.pipeline.name))
     .slice(0, 3)
     .map((item) => item.pipeline);
+}
+
+function variablesInText(text: string) {
+  return [...new Set(Array.from(text.matchAll(/\$\{([A-Z0-9_]+)\}/g)).map((match) => match[1]))].sort();
+}
+
+function looksLikeColor(value: unknown) {
+  return typeof value === "string" && /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value.trim());
 }
 
 function dataFitScore(entry: Entry) {
@@ -475,13 +486,13 @@ export function App() {
     };
   }, [selectedExperiment, selectedEntry]);
 
-  async function runSelectedPipeline(dryRun: boolean, forceFresh = false, sourceMode = "") {
+  async function runSelectedPipeline(dryRun: boolean, forceFresh = false, sourceMode = "", globalSet = "") {
     if (!selectedExperiment || !selectedPipelinePath) return;
     setRunBusy(true);
     setRunResult(null);
     setError("");
     try {
-      const result = await api.runPipeline(selectedExperiment, selectedPipelinePath, dryRun, forceFresh, sourceMode);
+      const result = await api.runPipeline(selectedExperiment, selectedPipelinePath, dryRun, forceFresh, sourceMode, globalSet);
       setRunResult(result);
       if (!dryRun && result.ok) {
         const [entryData, exportData, versionData, allVersionData] = await Promise.all([
@@ -1514,7 +1525,7 @@ function Workbench({
   experiment: string;
   runBusy: boolean;
   runResult: PipelineRunResult | null;
-  onRun: (dryRun: boolean, forceFresh?: boolean, sourceMode?: string) => void;
+  onRun: (dryRun: boolean, forceFresh?: boolean, sourceMode?: string, globalSet?: string) => void;
   yamlDraft: string;
   yamlDirty: boolean;
   saveBusy: boolean;
@@ -1535,7 +1546,35 @@ function Workbench({
   const [renameName, setRenameName] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameError, setRenameError] = useState("");
+  const [globalSets, setGlobalSets] = useState<GlobalSetSummary[]>([]);
+  const [selectedGlobalSet, setSelectedGlobalSet] = useState("");
   const flatPipelines = groupedPipelines.flatMap(([, items]) => items);
+  const usedGlobalVariables = useMemo(() => variablesInText(yamlDraft || pipeline?.yaml || ""), [yamlDraft, pipeline?.yaml]);
+
+  useEffect(() => {
+    if (!experiment) {
+      setGlobalSets([]);
+      setSelectedGlobalSet("");
+      return;
+    }
+    let cancelled = false;
+    api.globalSets(experiment)
+      .then((items) => {
+        if (cancelled) return;
+        setGlobalSets(items);
+        setSelectedGlobalSet((current) => {
+          if (current && items.some((item) => item.id === current)) return current;
+          if (!usedGlobalVariables.length) return "";
+          return items[0]?.id || "";
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setGlobalSets([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [experiment, selectedPipelinePath, usedGlobalVariables.length]);
 
   // Note: comment text was normalized to avoid mojibake.
   const liveGraph = useMemo(() => {
@@ -1728,14 +1767,14 @@ function Workbench({
                   </span>
                 </label>
                 <div className="dry-run-option">
-                  <button className="secondary-run-button" disabled={!pipeline || runBusy} onClick={() => onRun(true, false, runSourceMode)}>
+                  <button className="secondary-run-button" disabled={!pipeline || runBusy} onClick={() => onRun(true, false, runSourceMode, selectedGlobalSet)}>
                     <Activity size={15} /> Check flow
                   </button>
                   <small className="run-helper">Preview matched files and planned steps without creating data, plots, or versions.</small>
                 </div>
               </div>
             </details>
-            <button className="run-button" disabled={!pipeline || !experiment || runBusy} onClick={() => onRun(false, forceRecompute, runSourceMode)}>
+            <button className="run-button" disabled={!pipeline || !experiment || runBusy} onClick={() => onRun(false, forceRecompute, runSourceMode, selectedGlobalSet)}>
               <Play size={15} /> {runBusy ? "Generating" : "Generate result"}
             </button>
           </div>
@@ -1761,6 +1800,16 @@ function Workbench({
           <span>{sourceCount || 0} input / {stepCount || 0} steps / {outputCount || 0} output / {savedResultCount} saved results</span>
         <p>Check flow previews inputs and steps. Generate result writes the final output and records a version.</p>
         </div>
+        <GlobalVariablesPanel
+          experiment={experiment}
+          pipeline={pipeline}
+          yamlDraft={yamlDraft}
+          globalSets={globalSets}
+          setGlobalSets={setGlobalSets}
+          selectedGlobalSet={selectedGlobalSet}
+          onSelectGlobalSet={setSelectedGlobalSet}
+          usedVariables={usedGlobalVariables}
+        />
         {workbenchMode === "story" ? (
           <StoryView
             experiment={experiment}
@@ -1814,6 +1863,220 @@ function Workbench({
       />
     </div>
   );
+}
+
+function GlobalVariablesPanel({
+  experiment,
+  pipeline,
+  yamlDraft,
+  globalSets,
+  setGlobalSets,
+  selectedGlobalSet,
+  onSelectGlobalSet,
+  usedVariables
+}: {
+  experiment: string;
+  pipeline: PipelineDetail | null;
+  yamlDraft: string;
+  globalSets: GlobalSetSummary[];
+  setGlobalSets: (items: GlobalSetSummary[]) => void;
+  selectedGlobalSet: string;
+  onSelectGlobalSet: (name: string) => void;
+  usedVariables: string[];
+}) {
+  const [detail, setDetail] = useState<GlobalSetDetail | null>(null);
+  const [text, setText] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [resolveResult, setResolveResult] = useState<PipelineResolveResult | null>(null);
+  const values = detail?.values || {};
+  const missing = usedVariables.filter((key) => selectedGlobalSet && !(key in values));
+  const hasVariables = usedVariables.length > 0;
+
+  useEffect(() => {
+    setMessage("");
+    setResolveResult(null);
+    if (!experiment || !selectedGlobalSet) {
+      setDetail(null);
+      setText("");
+      setDirty(false);
+      return;
+    }
+    let cancelled = false;
+    api.globalSet(experiment, selectedGlobalSet)
+      .then((item) => {
+        if (cancelled) return;
+        setDetail(item);
+        setText(item.text);
+        setDirty(false);
+      })
+      .catch((err) => {
+        if (!cancelled) setMessage(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [experiment, selectedGlobalSet]);
+
+  async function refreshSets(nextSelection = selectedGlobalSet) {
+    const items = await api.globalSets(experiment);
+    setGlobalSets(items);
+    if (nextSelection) onSelectGlobalSet(nextSelection);
+  }
+
+  async function saveSet() {
+    if (!experiment) return;
+    const target = selectedGlobalSet || "default_style";
+    setBusy(true);
+    setMessage("");
+    try {
+      const saved = await api.saveGlobalSet(experiment, target, text || defaultGlobalSetText(target), "experiment");
+      await refreshSets(saved.id);
+      setDetail(saved);
+      setText(saved.text);
+      setDirty(false);
+      setMessage("Saved");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function duplicateSet() {
+    if (!experiment || !selectedGlobalSet) return;
+    const target = window.prompt("New variable set name", `${selectedGlobalSet}_copy`);
+    if (!target) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const item = await api.duplicateGlobalSet(experiment, selectedGlobalSet, target);
+      await refreshSets(item.id);
+      setDetail(item);
+      setText(item.text);
+      setDirty(false);
+      setMessage("Copied");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function previewResolved() {
+    if (!experiment || !pipeline) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await api.resolvePipeline(experiment, pipeline.path, selectedGlobalSet || undefined);
+      setResolveResult(result);
+      if (result.missing.length) setMessage(`Missing: ${result.missing.join(", ")}`);
+      else setMessage("Preview ready");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startNewSet() {
+    const name = "default_style";
+    onSelectGlobalSet(name);
+    setDetail(null);
+    setText(defaultGlobalSetText(name));
+    setDirty(true);
+    setResolveResult(null);
+  }
+
+  return (
+    <details className="global-panel" open={hasVariables}>
+      <summary>
+        <Sparkles size={15} />
+        <span>Style & variables</span>
+        {selectedGlobalSet && <em>{selectedGlobalSet}</em>}
+        {!selectedGlobalSet && hasVariables && <em>{usedVariables.length} variable(s)</em>}
+      </summary>
+      <div className="global-panel-body">
+        <div className="global-panel-main">
+          <label className="global-select">
+            <span>Variable set</span>
+            <select value={selectedGlobalSet} onChange={(event) => onSelectGlobalSet(event.target.value)}>
+              <option value="">No variable set</option>
+              {globalSets.map((item) => (
+                <option key={`${item.scope}:${item.id}`} value={item.id}>
+                  {item.name || item.id} ({item.scope})
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="global-actions">
+            <button className="secondary-save-button" onClick={startNewSet} disabled={busy}>New set</button>
+            <button className="secondary-save-button" onClick={duplicateSet} disabled={busy || !selectedGlobalSet}>Copy set</button>
+            <button className="secondary-save-button" onClick={previewResolved} disabled={busy || !pipeline}>Preview YAML</button>
+            <button className="primary-save-button" onClick={saveSet} disabled={busy || (!dirty && !!selectedGlobalSet)}>
+              {busy ? "Working" : selectedGlobalSet ? "Save set" : "Create set"}
+            </button>
+          </div>
+        </div>
+        {detail?.description && <p className="global-description">{detail.description}</p>}
+        <div className="global-variable-grid">
+          {(hasVariables ? usedVariables : Object.keys(values)).map((key) => {
+            const value = values[key];
+            const missingValue = selectedGlobalSet && !(key in values);
+            return (
+              <div key={key} className={`global-variable-chip ${missingValue ? "missing" : ""}`}>
+                {looksLikeColor(value) && <span className="global-swatch" style={{ background: String(value) }} />}
+                <strong>{key}</strong>
+                <span>{missingValue ? "missing" : String(value ?? "not used")}</span>
+              </div>
+            );
+          })}
+          {!hasVariables && <span className="global-empty-note">This pipeline does not use ${"{VAR}"} placeholders yet.</span>}
+        </div>
+        {missing.length > 0 && (
+          <div className="inline-error">This set is missing {missing.join(", ")} for the current pipeline.</div>
+        )}
+        <details className="global-editor">
+          <summary>Edit variable set YAML</summary>
+          <textarea
+            value={text}
+            onChange={(event) => {
+              setText(event.target.value);
+              setDirty(true);
+            }}
+            placeholder={defaultGlobalSetText(selectedGlobalSet || "default_style")}
+          />
+        </details>
+        {resolveResult && (
+          <details className="global-resolved-preview" open>
+            <summary>Resolved YAML preview</summary>
+            <pre>{resolveResult.resolvedText}</pre>
+          </details>
+        )}
+        {message && <span className="global-message">{message}</span>}
+      </div>
+    </details>
+  );
+}
+
+function defaultGlobalSetText(name: string) {
+  return `name: ${name}
+description: Shared style and parameters for related outputs
+variables:
+  PRIMARY_COLOR:
+    type: color
+    value: "#2563eb"
+    description: Main series color
+  SECONDARY_COLOR:
+    type: color
+    value: "#f97316"
+    description: Comparison series color
+  FIG_DPI:
+    type: number
+    value: 300
+    description: Export resolution
+`;
 }
 
 function RenamePipelineDialog({

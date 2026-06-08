@@ -82,6 +82,8 @@ class PipelineVersion(Base):
     cache_scope = Column(String(64), nullable=True)
     config_snapshot = Column(Text, nullable=True)
     processor_snapshot = Column(Text, nullable=True)
+    global_set = Column(String(128), nullable=True)
+    global_values_snapshot = Column(Text, nullable=True)
     result_hash = Column(String(64), nullable=True)
     status = Column(String(16), default="active")  # active / superseded
 
