@@ -904,7 +904,7 @@ function HomeView({
       <section className="panel home-panel">
         <div className="panel-header">
           <div>
-            <h3>Recent figures</h3>
+            <h3>Recent outputs</h3>
             <p>{experiment || "No experiment selected"}</p>
           </div>
           {recentResults.length > 0 && <button className="compact-action" onClick={() => setView("data")}><Eye size={15} /> Open all in Data</button>}
@@ -921,7 +921,7 @@ function HomeView({
             </button>
           )) : (
             <div className="friendly-empty home-empty">
-              <strong>No named figures yet.</strong>
+              <strong>No named outputs yet.</strong>
               <span>Run a pipeline with a final output export to populate this area.</span>
             </div>
           )}
@@ -1741,7 +1741,7 @@ function Workbench({
         )}
         <div className="run-note">
           <span>{sourceCount || 0} input / {stepCount || 0} steps / {outputCount || 0} output / {savedResultCount} saved results</span>
-          <p>Check flow previews inputs and steps. Generate result writes the figure and records a version.</p>
+        <p>Check flow previews inputs and steps. Generate result writes the final output and records a version.</p>
         </div>
         {workbenchMode === "story" ? (
           <StoryView
@@ -2335,7 +2335,7 @@ function FinalOutputSpotlight({
       <section className="final-output-spotlight empty">
         <div className="final-output-copy">
           <span className="final-output-kicker">Final output</span>
-          <strong>No synced final figure yet</strong>
+          <strong>No synced final output yet</strong>
           <p>Run this pipeline to generate and sync the latest export here.</p>
         </div>
       </section>
@@ -2912,16 +2912,16 @@ function CompactTablePreview({ preview }: { preview: Extract<Preview, { kind: "t
 function dataGroupLabel(entry: Entry) {
   const ext = entry.extension.toLowerCase();
   const text = `${entry.type} ${entry.tags.join(" ")} ${entry.fileName}`.toLowerCase();
-  if (entry.type === "raw" || text.includes("raw") || text.includes("input")) return "Raw inputs";
-  if ([".pdf", ".png", ".jpg", ".jpeg", ".svg"].includes(ext) || text.includes("export")) return "Generated figures";
-  if (entry.type === "processed" || [".parquet", ".csv", ".tsv", ".xlsx", ".xls", ".json", ".jsonl"].includes(ext)) return "Processed tables";
+  if (entry.type === "raw" || text.includes("raw") || text.includes("input")) return "Source inputs";
+  if ([".pdf", ".png", ".jpg", ".jpeg", ".svg"].includes(ext) || text.includes("export")) return "Final outputs";
+  if (entry.type === "processed" || [".parquet", ".csv", ".tsv", ".xlsx", ".xls", ".json", ".jsonl"].includes(ext)) return "Intermediate results";
   return "Other files";
 }
 
-const dataGroupOrder = ["Generated figures", "Processed tables", "Raw inputs", "Other files"];
+const dataGroupOrder = ["Final outputs", "Intermediate results", "Source inputs", "Other files"];
 
 function defaultOpenDataGroups() {
-  return new Set(["Generated figures", "Other files"]);
+  return new Set(["Final outputs", "Other files"]);
 }
 
 type FigureReturnTarget = {
@@ -2974,7 +2974,7 @@ function DataView({
   const filtered = entries.filter((entry) => {
     const matchesFilter = `${entry.fileName} ${entry.tags.join(" ")} ${entry.type}`.toLowerCase().includes(filter.toLowerCase());
     if (!matchesFilter) return false;
-    if (dataGroupLabel(entry) === "Generated figures" && versionExportIds.has(entry.id) && !currentExportIds.has(entry.id)) {
+    if (dataGroupLabel(entry) === "Final outputs" && versionExportIds.has(entry.id) && !currentExportIds.has(entry.id)) {
       return false;
     }
     return true;
@@ -3032,7 +3032,7 @@ function DataView({
     return result;
   }, [entries, exports, versions]);
   const figureVersions = useMemo(() => {
-    if (!selectedEntry || dataGroupLabel(selectedEntry) !== "Generated figures") return [];
+    if (!selectedEntry || dataGroupLabel(selectedEntry) !== "Final outputs") return [];
     const entryById = new Map(entries.map((entry) => [entry.id, entry]));
     const exportEntryById = new Map(exports.map((item) => [item.entryId, item.entry]));
     const exportNameById = new Map(exports.map((item) => [item.entryId, item.name]));
@@ -3102,9 +3102,9 @@ function DataView({
     };
   }
 
-  const selectedFigureTarget = selectedEntry && dataGroupLabel(selectedEntry) === "Generated figures" ? figureTargetForEntry(selectedEntry) : null;
+  const selectedFigureTarget = selectedEntry && dataGroupLabel(selectedEntry) === "Final outputs" ? figureTargetForEntry(selectedEntry) : null;
   const relatedFinalTargets = (() => {
-    if (!selectedEntry || dataGroupLabel(selectedEntry) === "Generated figures") return [];
+    if (!selectedEntry || dataGroupLabel(selectedEntry) === "Final outputs") return [];
     const merged = [
       ...(lineageReturnTarget ? [lineageReturnTarget] : []),
       ...(returnTargetsByEntryId.get(selectedEntry.id) || [])
@@ -3123,7 +3123,7 @@ function DataView({
     setExpandedGroups((current) => new Set(current).add(group));
     setSelectedEntry(entry);
     setFocusedEntryId(entry.id);
-    setLineageReturnTarget(group === "Generated figures" ? null : sourceFigure || null);
+    setLineageReturnTarget(group === "Final outputs" ? null : sourceFigure || null);
     window.setTimeout(() => {
       document.getElementById(`data-entry-${entry.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
     }, 80);
@@ -3150,8 +3150,8 @@ function DataView({
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h3>Figures and files</h3>
-            <p>Final figures first, source and processed files folded below</p>
+            <h3>Outputs and files</h3>
+            <p>Final outputs first; source inputs and intermediate results stay folded until needed</p>
           </div>
         </div>
         <div className="search-box">
@@ -3177,10 +3177,10 @@ function DataView({
                   className={`entry-row ${selectedEntry?.id === entry.id ? "active" : ""} ${focusedEntryId === entry.id ? "focused" : ""}`}
                   onClick={() => openEntry(entry, selectedFigureTarget)}
                 >
-                  <span className={`type-badge ${dataGroupLabel(entry) === "Generated figures" ? "figure" : entry.type}`}>{dataGroupLabel(entry) === "Generated figures" ? "figure" : entry.type}</span>
+                  <span className={`type-badge ${dataGroupLabel(entry) === "Final outputs" ? "output" : entry.type}`}>{dataGroupLabel(entry) === "Final outputs" ? "output" : entry.type}</span>
                   <span>
                     <strong>{figureContextByEntryId.get(entry.id)?.resultName || entry.fileName || `Entry ${entry.id}`}</strong>
-                    {dataGroupLabel(entry) === "Generated figures" && (
+                    {dataGroupLabel(entry) === "Final outputs" && (
                       <em>{figureContextByEntryId.get(entry.id)?.pipelineName || "Pipeline not recorded"}</em>
                     )}
                   </span>
@@ -3259,7 +3259,7 @@ function FigureVersionBrowser({
     <section className="figure-version-panel">
       <div className="figure-version-head">
         <div>
-          <strong>Figure versions</strong>
+          <strong>Output versions</strong>
           <span>{versions.length} version{versions.length === 1 ? "" : "s"} for this output</span>
         </div>
         <div className="figure-version-actions">
@@ -3336,7 +3336,7 @@ function VersionCompareModal({
   onClose: () => void;
 }) {
   return (
-    <div className="preview-modal-backdrop" role="dialog" aria-modal="true" aria-label="Compare figure versions">
+    <div className="preview-modal-backdrop" role="dialog" aria-modal="true" aria-label="Compare output versions">
       <section className="preview-modal compare-modal">
         <div className="preview-modal-header">
           <div>
@@ -3495,7 +3495,7 @@ function PreviewPanel({
                 onClick={() => onOpenEntry?.(primaryReturnTarget.entry, null)}
               >
                 <FileBarChart size={15} />
-                Back to final figure{returnTargets.length > 1 ? ` (${returnTargets.length})` : ""}
+                Back to final output{returnTargets.length > 1 ? ` (${returnTargets.length})` : ""}
               </button>
             )}
             <a className="download-link" href={api.fileUrl(experiment, entry.id)} target="_blank" rel="noreferrer">
