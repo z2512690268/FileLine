@@ -1,4 +1,5 @@
-from core.global_sets import parse_global_set_text, resolve_text
+from core import global_sets
+from core.global_sets import parse_global_set_text, resolve_text, save_global_set
 
 
 def test_parse_yaml_global_set_values():
@@ -33,3 +34,26 @@ def test_resolve_text_reports_used_and_missing_variables():
     assert "figsize: [7, 4]" in result["resolvedText"]
     assert result["used"] == {"FIG_SIZE": "[7, 4]", "PRIMARY_COLOR": "#2563eb"}
     assert result["missing"] == ["UNKNOWN"]
+
+
+def test_saving_experiment_set_does_not_overwrite_shared_set(tmp_path, monkeypatch):
+    shared = tmp_path / "FileLine-Pipelines" / "_globals"
+    experiment = tmp_path / "experiments" / "demo" / "globals"
+    shared.mkdir(parents=True)
+    experiment.mkdir(parents=True)
+    (shared / "paper.yaml").write_text(
+        "name: paper\nvariables:\n  PRIMARY_COLOR:\n    value: '#111111'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(global_sets, "global_roots", lambda experiment_name=None: [shared, experiment])
+
+    saved = save_global_set(
+        "paper",
+        "name: paper\nvariables:\n  PRIMARY_COLOR:\n    value: '#222222'\n",
+        experiment="demo",
+        scope="experiment",
+    )
+
+    assert saved["scope"] == "experiment"
+    assert saved["values"]["PRIMARY_COLOR"] == "#222222"
+    assert "#111111" in (shared / "paper.yaml").read_text(encoding="utf-8")

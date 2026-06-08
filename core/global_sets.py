@@ -138,7 +138,11 @@ def save_global_set(
     scope: str = "experiment",
 ) -> dict[str, Any]:
     slug = slugify_global_name(name)
-    path = global_set_path(slug, experiment, create_scope=scope)
+    roots = global_roots(experiment)
+    if scope == "shared" or len(roots) == 1:
+        path = roots[0] / f"{slug}.yaml"
+    else:
+        path = roots[-1] / f"{slug}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     if not text.strip():
         text = yaml.safe_dump({
