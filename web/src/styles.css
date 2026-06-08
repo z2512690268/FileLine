@@ -615,6 +615,24 @@ select {
   font-size: 12px;
 }
 
+
+.create-preview-details {
+  margin-top: 2px;
+}
+
+.create-preview-details .auto-plan-fields,
+.create-preview-details .compact-table-preview {
+  margin: 10px;
+}
+
+.auto-plan-columns.compact {
+  gap: 6px;
+}
+
+.auto-plan-columns.compact .auto-column-chip {
+  padding: 7px 9px;
+}
+
 .goal-button,
 .template-row {
   width: 100%;
@@ -930,6 +948,31 @@ select {
 
 .result-card svg {
   color: #0f766e;
+}
+
+.result-card-icon {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 7px;
+  background: #e6f6f2;
+}
+
+.result-card em {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  min-height: 26px;
+  margin-top: auto;
+  padding: 0 8px;
+  border: 1px solid #b9dcd5;
+  border-radius: 999px;
+  background: #fff;
+  color: #0f766e;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
 }
 
 .result-card strong {
@@ -1589,6 +1632,49 @@ select {
   font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
+}
+
+
+.final-output-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.final-output-meta span {
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid #dbe5ee;
+  border-radius: 999px;
+  background: #fff;
+  color: #5b6b7f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.technical-details {
+  border: 1px solid #e4eaf2;
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.technical-details summary {
+  min-height: 32px;
+  padding: 0 10px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.technical-details p {
+  margin: 0;
+  padding: 0 10px 10px;
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .final-output-actions {
@@ -2946,6 +3032,11 @@ summary {
 .type-badge.processed {
   background: #effaf4;
   color: #16734f;
+}
+
+.type-badge.figure {
+  background: #eef2ff;
+  color: #4338ca;
 }
 
 .table-preview {

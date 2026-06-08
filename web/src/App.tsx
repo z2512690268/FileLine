@@ -268,6 +268,20 @@ function latestFinalEntry(
   return null;
 }
 
+function sourceSummaryFromNodes(nodes: GraphNode[]) {
+  const sources = nodes.filter((node) => node.type === "source");
+  if (!sources.length) return "Source: current experiment data";
+  const labels = sources.map((node) => {
+    const includes = ((node.meta || {}).includes as Array<Record<string, unknown>> | undefined) || [];
+    const firstInclude = includes[0] || {};
+    const path = String(firstInclude.path || firstInclude.regex || firstInclude.remote || node.label || "input");
+    const suffix = includes.length > 1 ? ` +${includes.length - 1}` : "";
+    return `${path}${suffix}`;
+  });
+  if (labels.length === 1) return `Source: ${labels[0]}`;
+  return `Sources: ${labels.slice(0, 2).join(", ")}${labels.length > 2 ? ` +${labels.length - 2}` : ""}`;
+}
+
 export function App() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [pipelines, setPipelines] = useState<PipelineSummary[]>([]);
@@ -893,16 +907,17 @@ function HomeView({
             <h3>Recent figures</h3>
             <p>{experiment || "No experiment selected"}</p>
           </div>
-          {recentResults.length > 0 && <button className="compact-action" onClick={() => setView("data")}>Open all</button>}
+          {recentResults.length > 0 && <button className="compact-action" onClick={() => setView("data")}><Eye size={15} /> Open all in Data</button>}
         </div>
         <div className="result-card-grid">
           {recentResults.length > 0 ? recentResults.map((item) => (
             <button key={item.name} className="result-card" onClick={() => {
               setView("data");
             }}>
-              <FileBarChart size={18} />
+              <div className="result-card-icon"><FileBarChart size={18} /></div>
               <strong>{item.name}</strong>
               <span>ID {item.entryId}  -  {shortDate(item.createdAt)}</span>
+              <em>Open in Data</em>
             </button>
           )) : (
             <div className="friendly-empty home-empty">
@@ -1277,39 +1292,42 @@ function CreateFigureView({
                   </select>
                 </label>
               </div>
-              <div className="auto-plan-fields">
-                {Object.entries(chartPlan.params).filter(([, value]) => value !== null && value !== "").map(([key, value]) => (
-                  <div key={key}>
-                    <span>{key}</span>
-                    <strong>{String(value)}</strong>
-                  </div>
-                ))}
-              </div>
-              <div className="auto-plan-columns">
-                {chartPlan.columns.slice(0, 6).map((column) => (
+              <div className="auto-plan-columns compact">
+                {chartPlan.columns.slice(0, 4).map((column) => (
                   <div key={column.name} className="auto-column-chip">
                     <strong>{column.name}</strong>
                     <span>{column.kind}  -  {column.uniqueCount} unique</span>
                   </div>
                 ))}
               </div>
-              {chartPlan.sampleRows.length > 0 && (
-                <div className="compact-table-preview">
-                  <p>{chartPlan.shape[0]} rows x {chartPlan.shape[1]} columns</p>
-                  <table>
-                    <thead>
-                      <tr>{Object.keys(chartPlan.sampleRows[0]).slice(0, 5).map((column) => <th key={column}>{column}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                      {chartPlan.sampleRows.slice(0, 6).map((row, index) => (
-                        <tr key={index}>
-                          {Object.keys(chartPlan.sampleRows[0]).slice(0, 5).map((column) => <td key={column}>{String(row[column] ?? "")}</td>)}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <details className="advanced-block create-preview-details">
+                <summary><Table2 size={15} /> Data preview and inferred params</summary>
+                <div className="auto-plan-fields">
+                  {Object.entries(chartPlan.params).filter(([, value]) => value !== null && value !== "").map(([key, value]) => (
+                    <div key={key}>
+                      <span>{key}</span>
+                      <strong>{String(value)}</strong>
+                    </div>
+                  ))}
                 </div>
-              )}
+                {chartPlan.sampleRows.length > 0 && (
+                  <div className="compact-table-preview">
+                    <p>{chartPlan.shape[0]} rows x {chartPlan.shape[1]} columns</p>
+                    <table>
+                      <thead>
+                        <tr>{Object.keys(chartPlan.sampleRows[0]).slice(0, 5).map((column) => <th key={column}>{column}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {chartPlan.sampleRows.slice(0, 4).map((row, index) => (
+                          <tr key={index}>
+                            {Object.keys(chartPlan.sampleRows[0]).slice(0, 5).map((column) => <td key={column}>{String(row[column] ?? "")}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </details>
             </>
           ) : (
             <div className="friendly-empty">
@@ -1566,6 +1584,7 @@ function Workbench({
   }, [yamlDraft, pipeline]);
 
   const finalEntry = latestFinalEntry(pipeline, stageResults, exports);
+  const finalSourceSummary = sourceSummaryFromNodes(liveGraph.nodes);
   const sourceCount = liveGraph.nodes.filter((node) => node.type === "source").length;
   const stepCount = liveGraph.nodes.filter((node) => node.type === "processor").length;
   const outputCount = liveGraph.nodes.filter((node) => node.type === "export").length;
@@ -1733,6 +1752,7 @@ function Workbench({
             selectedNode={selectedNode}
             onSelectNode={setSelectedNode}
             finalEntry={finalEntry}
+            sourceSummary={finalSourceSummary}
             onOpenResults={onOpenResults}
           />
         ) : (
@@ -1752,7 +1772,7 @@ function Workbench({
             </div>
             <details className="graph-preview" open={finalEntry !== null}>
               <summary>Final Output</summary>
-              <FinalOutputSpotlight experiment={experiment} entry={finalEntry} exportLabel={liveGraph.nodes.find(n => n.type === "export")?.label || ""} onOpenResults={onOpenResults} />
+              <FinalOutputSpotlight experiment={experiment} entry={finalEntry} exportLabel={liveGraph.nodes.find(n => n.type === "export")?.label || ""} sourceSummary={finalSourceSummary} onOpenResults={onOpenResults} />
             </details>
           </>
         )}
@@ -2187,6 +2207,7 @@ function StoryView({
   selectedNode,
   onSelectNode,
   finalEntry,
+  sourceSummary,
   onOpenResults
 }: {
   experiment: string;
@@ -2196,6 +2217,7 @@ function StoryView({
   selectedNode: GraphNode | null;
   onSelectNode: (node: GraphNode) => void;
   finalEntry: Entry | null;
+  sourceSummary: string;
   onOpenResults: (entry: Entry) => void;
 }) {
   if (!pipeline) {
@@ -2215,7 +2237,7 @@ function StoryView({
         <span>{pipeline.group}</span>
       </div>
 
-      <FinalOutputSpotlight experiment={experiment} entry={finalEntry} exportLabel={outputs.find(n => (stageResults[n.id] || []).some(e => e.id === finalEntry?.id))?.label || ""} onOpenResults={onOpenResults} />
+      <FinalOutputSpotlight experiment={experiment} entry={finalEntry} exportLabel={outputs.find(n => (stageResults[n.id] || []).some(e => e.id === finalEntry?.id))?.label || ""} sourceSummary={sourceSummary} onOpenResults={onOpenResults} />
 
       <div className="story-section">
         <div className="story-section-title">1. Choose input data</div>
@@ -2275,11 +2297,13 @@ function FinalOutputSpotlight({
   experiment,
   entry,
   exportLabel,
+  sourceSummary,
   onOpenResults
 }: {
   experiment: string;
   entry: Entry | null;
   exportLabel: string;
+  sourceSummary: string;
   onOpenResults: (entry: Entry) => void;
 }) {
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -2323,7 +2347,15 @@ function FinalOutputSpotlight({
       <div className="final-output-copy">
         <span className="final-output-kicker">Final output</span>
         <strong>{exportLabel || entry.fileName || `Entry ${entry.id}`}</strong>
-        <p>{entry.description || shortDate(entry.timestamp) || "Latest exported result from this pipeline."}</p>
+        <div className="final-output-meta">
+          <span>{entry.fileName || `Entry ${entry.id}`}</span>
+          <span>{sourceSummary}</span>
+          <span>{shortDate(entry.timestamp)}</span>
+        </div>
+        <details className="technical-details">
+          <summary>Technical details</summary>
+          <p>{entry.description || "No processor details recorded."}</p>
+        </details>
         <div className="final-output-actions">
           <a className="hero-secondary" href={api.fileUrl(experiment, entry.id)} target="_blank" rel="noreferrer">
             <Download size={15} /> Open file
@@ -3145,7 +3177,7 @@ function DataView({
                   className={`entry-row ${selectedEntry?.id === entry.id ? "active" : ""} ${focusedEntryId === entry.id ? "focused" : ""}`}
                   onClick={() => openEntry(entry, selectedFigureTarget)}
                 >
-                  <span className={`type-badge ${entry.type}`}>{entry.type}</span>
+                  <span className={`type-badge ${dataGroupLabel(entry) === "Generated figures" ? "figure" : entry.type}`}>{dataGroupLabel(entry) === "Generated figures" ? "figure" : entry.type}</span>
                   <span>
                     <strong>{figureContextByEntryId.get(entry.id)?.resultName || entry.fileName || `Entry ${entry.id}`}</strong>
                     {dataGroupLabel(entry) === "Generated figures" && (
@@ -3623,7 +3655,7 @@ function ProcessorStudio({ experiment, onSaved }: { experiment: string; onSaved:
       <div className="panel-header">
         <div>
           <h3>Processor Studio</h3>
-          <p>{selectedTemplate?.description || "Create or edit an experiment processor"}</p>
+          <p>Advanced tool for custom parsing and data transforms. Start from a template, validate the FileLine format, then save it for this experiment.</p>
         </div>
         <FileCode size={18} />
       </div>
