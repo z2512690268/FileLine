@@ -98,9 +98,13 @@ def check_cmd(fix):
                 click.echo(f"  {name}")
 
             if fix:
+                from core.models import ExportMeta
                 for name in meta_orphans:
                     del storage._meta_cache[name]
-                storage._save_exports_meta()
+                    session.query(ExportMeta).filter(
+                        ExportMeta.name == name
+                    ).delete()
+                session.commit()
                 click.secho("  已清理 exports.meta", fg="green")
         else:
             click.secho("[exports.meta] 一致性检查通过 ✓", fg="green")

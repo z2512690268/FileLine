@@ -1,0 +1,34 @@
+name: test_versioned_line
+description: Version browser demo for generated trend figures.
+initial_load:
+  include:
+  - path: /home/keyao/cloudcli/FileLine/experiments/test/raw/33.csv
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - version_demo
+  - studio
+steps:
+- processor: plot_line
+  inputs: initial
+  output: line_demo
+  params:
+    time_col: epoch
+    value_col: loss
+    tag_col: run
+    title: Versioned Line Demo - v5
+    xlabel: Epoch
+    ylabel: Loss
+    tag_colors:
+      A: '#dc2626'
+      B: '#7c3aed'
+    ylim:
+    - 0
+    - 1
+  cache: false
+  force_rerun: true
+final_output:
+- name: line_demo
+  export: versioned_line_demo.pdf

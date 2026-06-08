@@ -1,0 +1,51 @@
+name: Standard branching comparison
+description: Start from one source and create both a line figure and a bar figure.
+initial_load:
+  include:
+  - path: '*'
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - studio
+  - standard_template
+steps:
+- processor: file_identity
+  inputs: initial
+  output: prepared_table
+  params: {}
+- processor: plot_line
+  inputs: prepared_table
+  output: branch_line_figure
+  params:
+    time_col: x
+    value_col: value
+    tag_col: series
+    title: Trend View
+    xlabel: X
+    ylabel: Value
+    figsize:
+    - 6
+    - 4
+    grid: true
+    dpi: 300
+- processor: plot_bar
+  inputs: prepared_table
+  output: branch_bar_figure
+  params:
+    x_col: category
+    value_col: value
+    title: Summary View
+    xlabel: Category
+    ylabel: Value
+    figsize:
+    - 6
+    - 4
+    grid: true
+    dpi: 300
+final_output:
+- name: branch_line_figure
+  export: branch_line_figure.pdf
+- name: branch_bar_figure
+  export: branch_bar_figure.pdf

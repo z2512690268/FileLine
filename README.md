@@ -154,6 +154,57 @@
 
 FileLine 提供了基于 Streamlit 的交互式可视化绘图平台，无需编写 YAML 配置文件即可创建图表。
 
+### React 工作台（新版）
+
+新版前端位于 `web/`，使用 React + Vite + React Flow，并通过 FastAPI 读取现有实验、导出结果、Pipeline YAML、处理器注册信息和 DAG 结构。
+
+当前 React 工作台支持：
+
+- 浏览配置文件和 `experiments/` 目录中发现的所有实验。
+- 浏览 `FileLine-Pipelines/` 中的 YAML pipeline，并自动生成 DAG。
+- 在 Inspector 中查看节点参数、全局变量和完整 YAML。
+- 直接编辑并保存 pipeline YAML，保存时会校验 YAML 结构并刷新 DAG。
+- 对 pipeline 执行 dry-run 或真实 run。
+- 浏览导出文件、版本记录、数据条目和 processor registry。
+- 预览表格、文本、PDF、图片，并查看数据 lineage。
+
+生产部署（单进程托管 API + React 静态文件）：
+
+```bash
+cd FileLine
+./scripts/deploy_fileline_web.sh
+```
+
+默认监听 `0.0.0.0:8088`，可通过环境变量覆盖：
+
+```bash
+FILELINE_WEB_PORT=8090 ./scripts/deploy_fileline_web.sh
+```
+
+查看/停止：
+
+```bash
+./scripts/status_fileline_web.sh
+./scripts/stop_fileline_web.sh
+```
+
+启动后端：
+
+```bash
+cd FileLine
+python -m uvicorn api_server:app --host 127.0.0.1 --port 8000
+```
+
+启动前端：
+
+```bash
+cd FileLine/web
+npm install
+npm run dev
+```
+
+然后打开 http://localhost:5173
+
 ### 启动方式
 
 ```bash

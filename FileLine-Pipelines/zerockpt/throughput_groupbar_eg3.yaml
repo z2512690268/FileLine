@@ -68,7 +68,7 @@ steps:
         - "ideal"
       
       colors:
-        deepspeed:       ${DEEPSEED_COLOR}
+        deepspeed:       ${DEEPSPEED_COLOR}
         torch_dcp:       ${TORCH_DCP_COLOR}
         bytecheckpoint:  ${BYTECHECKPOINT_COLOR}
         torch_snapshot:  ${TORCH_SNAPSHOT_COLOR}

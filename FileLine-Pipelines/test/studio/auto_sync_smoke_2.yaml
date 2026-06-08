@@ -1,0 +1,31 @@
+name: auto_sync_smoke
+description: Auto-generated from extra_data.csv
+initial_load:
+  include:
+  - path: extra_data.csv
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - studio
+  - auto_chart
+steps:
+- processor: plot_grouped_bar
+  inputs: initial
+  output: auto_sync_smoke
+  params:
+    main_group_col: cat
+    sub_group_col: group
+    value_col: value
+    title: Extra Data
+    xlabel: Cat
+    ylabel: Value
+    figsize:
+    - 6
+    - 4
+    grid: true
+    dpi: 300
+final_output:
+- name: auto_sync_smoke
+  export: auto_sync_smoke.pdf

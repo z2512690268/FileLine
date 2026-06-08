@@ -52,10 +52,11 @@ class InitialLoadConfig:
     tags: Optional[List[str]] = None  # 自动添加的标签
 
 class PipelineRunner:
-    def __init__(self, storage: FileStorage, session: Session):
+    def __init__(self, storage: FileStorage, session: Session, cache_scope: str = "legacy"):
         self.storage = storage
         self.session = session
         self.context = {}
+        self.cache_scope = cache_scope or "legacy"
     
     def execute(self,
                initial_load: InitialLoadConfig,
@@ -110,7 +111,7 @@ class PipelineRunner:
                     all_entries.extend(outputs)
                 entries = all_entries
                 if step.export:
-                    export_path = self.storage.create_export_file(step.export, entries[0].id)
+                    export_path = self.storage.create_export_file(step.export, entries[0].id, self.session)
                     shutil.copy(entries[0].path, export_path)
                 if debug:
                     for e in entries:
@@ -130,7 +131,8 @@ class PipelineRunner:
             # ── 多输出缓存 (StepCache 多行同 hash, 含 group_name) ──
             if process_desc["output_type"] == "multi" and step.cache and not step.force_rerun:
                 cached_rows = self.session.query(StepCache).filter(
-                    StepCache.input_hash == step_hash
+                    StepCache.input_hash == step_hash,
+                    StepCache.cache_scope == self.cache_scope,
                 ).order_by(StepCache.id).all()
                 if cached_rows:
                     cached_ids = [c.output_id for c in cached_rows]
@@ -150,14 +152,15 @@ class PipelineRunner:
             # ── 单输出缓存检查 ──
             if process_desc["output_type"] != "multi":
                 cached = self.session.query(StepCache).filter(
-                    StepCache.input_hash == step_hash
+                    StepCache.input_hash == step_hash,
+                    StepCache.cache_scope == self.cache_scope,
                 ).order_by(StepCache.created_at.desc()).first()
 
                 if cached and not step.force_rerun and step.cache:
                     self.context[step.output_var] = [cached.output_id]
                     entry = self.session.query(DataEntry).get(cached.output_id)
                     if step.export:
-                        export_path = self.storage.create_export_file(step.export, entry.id)
+                        export_path = self.storage.create_export_file(step.export, entry.id, self.session)
                         shutil.copy(entry.path, export_path)
                     if debug:
                         print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
@@ -167,20 +170,6 @@ class PipelineRunner:
                             print("Exported To Path: ", export_path)
                         print("-------------------------------------------")
                     continue
-            if process_desc["output_type"] == "multi" and step.cache and not step.force_rerun:
-                cached_rows = self.session.query(StepCache).filter(
-                    StepCache.input_hash == step_hash
-                ).order_by(StepCache.id).all()
-                if cached_rows:
-                    cached_ids = [c.output_id for c in cached_rows]
-                    # 验证所有条目都存在
-                    if all(self.session.query(DataEntry).get(eid) for eid in cached_ids):
-                        self.context[step.output_var] = cached_ids
-                        if debug:
-                            print(f"  [cache] multi-output: {cached_ids}")
-                            print("-------------------------------------------")
-                        continue
-
             if debug:
                 print("Pipeline Step: ", step.processor, "Inputs: ", step.inputs, "Params: ", step.params)
 
@@ -203,7 +192,11 @@ class PipelineRunner:
                     if step.cache:
                         for e in group_entries:
                             self.session.add(StepCache(
-                                input_hash=step_hash, output_id=e.id, group_name=group_name))
+                                input_hash=step_hash,
+                                output_id=e.id,
+                                group_name=group_name,
+                                cache_scope=self.cache_scope,
+                            ))
                     if debug:
                         print(f"  [{step.output_var}] group '{group_name}' → ${var_name}: {[e.id for e in group_entries]}")
                 if debug:
@@ -218,12 +211,13 @@ class PipelineRunner:
                 self.session.add(StepCache(
                     input_hash=step_hash,
                     output_id=entries[0].id,
+                    cache_scope=self.cache_scope,
                 ))
 
             # 导出
             if step.export:
                 first = entries[0]
-                export_path = self.storage.create_export_file(step.export, first.id)
+                export_path = self.storage.create_export_file(step.export, first.id, self.session)
                 shutil.copy(first.path, export_path)
 
             if debug:
@@ -236,7 +230,11 @@ class PipelineRunner:
             # 缓存多输出 (list)
             if step.cache and is_multi:
                 for e in entries:
-                    self.session.add(StepCache(input_hash=step_hash, output_id=e.id))
+                    self.session.add(StepCache(
+                        input_hash=step_hash,
+                        output_id=e.id,
+                        cache_scope=self.cache_scope,
+                    ))
 
             self.context[step.output_var] = [e.id for e in entries]
             self._log_step(step, entries[0].id)
@@ -256,7 +254,11 @@ class PipelineRunner:
         return os.path.getmtime(file_path)
 
     def _sync_remote(self, spec: IncludeSpec, debug: bool = False) -> str:
-        """将远程目录 rsync 到本地缓存, 返回本地路径"""
+        """将远程文件 rsync 到本地缓存, 返回本地缓存目录路径
+
+        当 spec.path 是具体文件名时, 拼接 remote 基目录 + path, 只拉取单个文件;
+        含 glob 通配符时回退到拉取 remote 整个目录.
+        """
         if not spec.remote:
             return spec.path
         # 解析 remote 格式: "user@host:port:/path" 或 "user@host:/path"
@@ -270,16 +272,25 @@ class PipelineRunner:
                 raise ValueError(f"无效的 remote 格式: {spec.remote} (应为 user@host:port:/path 或 user@host:/path)")
             user, host, port, rpath = m.group(1), m.group(2), "22", m.group(3)
 
-        # 本地缓存目录
-        cache_key = hashlib.md5(f"{spec.remote}".encode()).hexdigest()[:12]
+        # 本地缓存目录 (hash 包含 path 以区分同目录下不同文件)
+        cache_key = hashlib.md5(f"{spec.remote}:{spec.path}".encode()).hexdigest()[:12]
         cache_dir = Path.home() / ".cache" / "fileline" / "remote" / cache_key
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         ssh_cmd = f"ssh -p {port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-        remote_src = f"{user}@{host}:{rpath}/" if not rpath.endswith("/") and Path(rpath).suffix == "" else f"{user}@{host}:{rpath}"
-        # 如果远程路径是文件而非目录, 不加尾部斜杠
-        cmd = ["rsync", "-az"]
-        cmd += ["-e", ssh_cmd, remote_src, str(cache_dir) + "/"]
+
+        # 判断是否为 glob 模式
+        is_glob = any(c in spec.path for c in '*?[')
+        if not is_glob:
+            # 精确文件: 拼接完整路径, 只拉取该文件
+            remote_file = str(Path(rpath) / spec.path)
+            remote_src = f"{user}@{host}:{remote_file}"
+            local_target = cache_dir / Path(spec.path).name
+            cmd = ["rsync", "-az", "-e", ssh_cmd, remote_src, str(local_target)]
+        else:
+            # glob 模式: 拉取整个目录, 后续由 glob 匹配
+            remote_src = f"{user}@{host}:{rpath}/" if not rpath.endswith("/") and Path(rpath).suffix == "" else f"{user}@{host}:{rpath}"
+            cmd = ["rsync", "-az", "-e", ssh_cmd, remote_src, str(cache_dir) + "/"]
 
         if debug:
             click.echo(f"  [remote] {' '.join(cmd)}")
@@ -297,19 +308,40 @@ class PipelineRunner:
     def _load_initial_files(self, config: InitialLoadConfig,
                                 debug: bool = False) -> Dict[str, List[int]]:
         """加载初始文件, 返回 {source_name: [entry_id, ...]}"""
+        exp_config = experiment_manager.get_experiments().get(experiment_manager.current_experiment, {})
+        source_mode = os.environ.get("FILELINE_SOURCE_MODE") or exp_config.get("source_mode") or "auto"
+        if source_mode == "version":
+            try:
+                from .pipeline_versions import PipelineVersionManager
+                if PipelineVersionManager().get_current(os.environ.get("FILELINE_PIPELINE_PATH", "")) is None:
+                    source_mode = "external"
+            except Exception:
+                source_mode = "external"
         # 远程拉取预处理 (仅在非 raw 模式下执行)
-        if experiment_manager.get_experiments().get(experiment_manager.current_experiment, {}).get("source_mode") != "raw":
-            for spec in config.include_patterns:
+        remote_overrides: dict[int, str] = {}
+        if source_mode != "raw":
+            for si, spec in enumerate(config.include_patterns):
                 if spec.remote:
                     local_dir = self._sync_remote(spec, debug)
-                    spec.path = str(Path(local_dir) / spec.path)
+                    remote_overrides[si] = str(Path(local_dir) / spec.path)
 
-        # source_mode=raw: 从 DB 过滤已有数据 (按 original_path 匹配 include 模式)
-        exp_config = experiment_manager.get_experiments().get(experiment_manager.current_experiment, {})
-        if exp_config.get("source_mode") == "raw":
-            all_raw = self.session.query(DataEntry).filter(
-                DataEntry.type == config.data_type
-            ).all()
+        # source_mode=raw/version: 从 DB 过滤已有数据 (version 优先使用当前 pipeline 版本的 raw entry)
+        if source_mode in {"raw", "version"}:
+            version_raw_ids: Set[int] = set()
+            if source_mode == "version":
+                try:
+                    from .pipeline_versions import PipelineVersionManager
+                    current_version = PipelineVersionManager().get_current(os.environ.get("FILELINE_PIPELINE_PATH", ""))
+                    version_entry_ids = current_version.get("entry_ids", []) if current_version else []
+                    version_raw_ids = set(int(entry_id) for entry_id in version_entry_ids)
+                except Exception:
+                    version_raw_ids = set()
+            query = self.session.query(DataEntry).filter(DataEntry.type == config.data_type)
+            all_raw = query.all()
+            if version_raw_ids:
+                scoped_raw = [entry for entry in all_raw if entry.id in version_raw_ids]
+                if scoped_raw:
+                    all_raw = scoped_raw
             if not all_raw:
                 raise FileNotFoundError("无已有 raw 数据可用")
             source_buckets: Dict[str, List[DataEntry]] = {}
@@ -317,10 +349,25 @@ class PipelineRunner:
             for spec in config.include_patterns:
                 matches = []
                 for entry in all_raw:
-                    op = str(entry.original_path) if entry.original_path else ""
-                    # glob 匹配 original_path
-                    if Path(op).match(spec.path) or Path(op).match(f"**/{spec.path}"):
-                        matches.append(entry)
+                    candidates = [
+                        str(entry.original_path or ""),
+                        str(entry.path or ""),
+                    ]
+                    for op in candidates:
+                        if not op:
+                            continue
+                        if Path(op).match(spec.path) or Path(op).match(f"**/{spec.path}"):
+                            matches.append(entry)
+                            break
+                # 全局排除
+                for ex in (config.exclude_patterns or []):
+                    matches = [
+                        entry for entry in matches
+                        if not (
+                            Path(str(entry.original_path or "")).match(ex)
+                            or Path(str(entry.original_path or "")).match(f"**/{ex}")
+                        )
+                    ]
                 # 正则二次过滤
                 if spec.re_pattern and matches:
                     try:
@@ -359,8 +406,10 @@ class PipelineRunner:
                     click.echo(f"  [source_mode=raw] {src}: 去重 {before}→{len(seen)}")
 
             if not any(v for v in source_buckets.values()):
-                # fallback: 无法匹配时用全部 (兼容旧 YAML 没有特定路径)
-                source_buckets = {"initial": all_raw}
+                include_patterns = [spec.path for spec in config.include_patterns]
+                raise FileNotFoundError(
+                    f"source_mode=raw 下未找到匹配文件: {include_patterns}"
+                )
             result = {}
             for src, entries in source_buckets.items():
                 ids = []
@@ -381,8 +430,9 @@ class PipelineRunner:
 
         source_buckets: Dict[str, List[Path]] = {}
         spec_tags: Dict[str, List[str]] = {}
-        for spec in config.include_patterns:
-            matches = glob.glob(spec.path, recursive=True)
+        for si, spec in enumerate(config.include_patterns):
+            load_path = remote_overrides.get(si, spec.path)
+            matches = glob.glob(load_path, recursive=True)
 
             # 正则过滤
             if spec.re_pattern:

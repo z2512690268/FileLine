@@ -1,0 +1,31 @@
+name: Standard timeline chart
+description: Show events, stages, or GPU activity as horizontal timeline bars.
+initial_load:
+  include:
+  - path: '*'
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - studio
+  - standard_template
+steps:
+- processor: plot_timeline_hbar
+  inputs: initial
+  output: timeline_figure
+  params:
+    category_col: category
+    sub_category_col: stage
+    start_col: start
+    end_col: end
+    title: Timeline
+    xlabel: Time
+    figsize:
+    - 8
+    - 5
+    grid: true
+    dpi: 300
+final_output:
+- name: timeline_figure
+  export: timeline_figure.pdf

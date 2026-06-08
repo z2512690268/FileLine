@@ -1,0 +1,57 @@
+initial_load:
+  include:
+    - path: >-
+        /home/keyao/.cache/fileline/remote/370004672ee6/fmrl_subprocess_main2.log
+  type: raw
+
+steps:
+  - processor: parse_fmrl_timeline
+    inputs: initial
+    output: timeline_data
+
+  - processor: simplify_timeline_kinds
+    inputs: timeline_data
+    output: simplified_data
+
+  - processor: plot_timeline_hbar
+    inputs: simplified_data
+    output: timeline_chart
+    params:
+      category_col: display_group
+      sub_category_col: kind_label
+      start_col: start_sec
+      end_col: end_sec
+      duration_col: duration
+      title: ""
+      xlabel: "Time (s)"
+      figsize: [10, 4]
+      dpi: 200
+      hbar_height: 0.35
+      preserve_csv_order: true
+      reverse_order: true
+      intra_group_gap: 0.45
+      inter_group_gap: 1.2
+      color_map:
+        "Init": "#95a5a6"
+        "Rollout": "#2ecc71"
+        "TrainPrep": "#FFA726"
+        "Reward+Train": "#3498db"
+        "Wait for Tail": "#f39c12"
+        "Cluster Rebuild": "#9b59b6"
+        "Tail Continuation": "#e74c3c"
+        "Idle": "#ecf0f1"
+      show_legend: true
+      legend_loc: "lower center"
+      legend_bbox_to_anchor: [0.5, 1.05]
+      legend_ncol: 4
+      grid: true
+      exclude_from_legend:
+        - "Idle"
+        - "Init"
+        - "Wait for Tail"
+        - "Cluster Rebuild"
+      min_label_duration_ratio: 1.0
+
+final_output:
+  - name: timeline_chart
+    export: fmrl_timeline.pdf

@@ -1,0 +1,30 @@
+name: Standard line chart
+description: Plot one numeric metric over an ordered x-axis.
+initial_load:
+  include:
+  - path: '*'
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - studio
+  - standard_template
+steps:
+- processor: plot_line
+  inputs: initial
+  output: line_figure
+  params:
+    time_col: x
+    value_col: value
+    title: Line Chart
+    xlabel: X
+    ylabel: Value
+    figsize:
+    - 6
+    - 4
+    grid: true
+    dpi: 300
+final_output:
+- name: line_figure
+  export: line_figure.pdf

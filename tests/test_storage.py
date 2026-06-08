@@ -77,7 +77,8 @@ class TestExport:
 
     def test_exports_meta_persistence(self, storage, sample_csv, db_session):
         entry = storage.store_raw_data(sample_csv, db_session)
-        storage.create_export_file("persist_test.csv", entry.id)
+        storage.create_export_file("persist_test.csv", entry.id, db_session)
+        db_session.commit()
         # 新建一个 storage 实例应能加载之前保存的 meta
         storage2 = FileStorage()
         assert "persist_test.csv" in storage2._meta_cache
@@ -85,6 +86,6 @@ class TestExport:
 
     def test_nested_export(self, storage, sample_csv, db_session):
         entry = storage.store_raw_data(sample_csv, db_session)
-        path = storage.create_export_file("subdir/nested.csv", entry.id)
+        path = storage.create_export_file("subdir/nested.csv", entry.id, db_session)
         assert path.parent.exists()
         assert path.parent.name == "subdir"

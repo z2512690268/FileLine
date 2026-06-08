@@ -1,0 +1,30 @@
+name: Standard bar chart
+description: Compare a numeric value across categories.
+initial_load:
+  include:
+  - path: '*'
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - studio
+  - standard_template
+steps:
+- processor: plot_bar
+  inputs: initial
+  output: bar_figure
+  params:
+    x_col: category
+    value_col: value
+    title: Bar Chart
+    xlabel: Category
+    ylabel: Value
+    figsize:
+    - 6
+    - 4
+    grid: true
+    dpi: 300
+final_output:
+- name: bar_figure
+  export: bar_figure.pdf

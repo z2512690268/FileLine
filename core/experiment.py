@@ -46,9 +46,26 @@ class ExperimentManager:
     def get_experiments(self) -> Dict:
         """获取所有实验配置"""
         config_file = self._CONFIG_DIR / "experiments.json"
-        if not config_file.exists():
-            return {}
-        return json.loads(config_file.read_text())
+        experiments = json.loads(config_file.read_text()) if config_file.exists() else {}
+
+        experiments_dir = self._PROJECT_ROOT / "experiments"
+        if experiments_dir.exists():
+            for exp_dir in sorted(p for p in experiments_dir.iterdir() if p.is_dir()):
+                if exp_dir.name in experiments:
+                    continue
+                db_candidates = sorted(exp_dir.glob("*.db"))
+                if not db_candidates:
+                    continue
+                preferred = exp_dir / f"{exp_dir.name}.db"
+                db_path = preferred if preferred.exists() else db_candidates[0]
+                experiments[exp_dir.name] = {
+                    "database": str(db_path.relative_to(self._PROJECT_ROOT)),
+                    "data_root": str(exp_dir.relative_to(self._PROJECT_ROOT)),
+                    "source_mode": "raw",
+                    "description": "Discovered from experiments directory",
+                    "created_at": datetime.fromtimestamp(exp_dir.stat().st_mtime).isoformat(),
+                }
+        return experiments
 
     def create(self, name: str, description: str = "") -> None:
         """创建新实验（新增方法）"""

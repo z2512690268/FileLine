@@ -33,15 +33,7 @@ def delete_cmd(ids, yes):
                 click.echo(f"  删除文件: {file_path}")
 
             # 2. 删除导出元信息中的引用及对应文件
-            for name in list(storage._meta_cache.keys()):
-                if storage._meta_cache[name].get("id") == entry.id:
-                    export_file = storage.base_path / "exports" / name
-                    if export_file.exists():
-                        export_file.unlink()
-                        click.echo(f"  删除导出文件: {export_file.relative_to(storage.base_path)}")
-                    del storage._meta_cache[name]
-                    click.echo(f"  清理 exports.meta: {name}")
-            storage._save_exports_meta()
+            storage.remove_export_meta(entry.id)
 
             # 3. 清理缓存表
             session.query(FileMTimeCache).filter(

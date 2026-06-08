@@ -35,3 +35,7 @@ test_data/
 docs/
 run_pipeline.sh
 *.flxp
+web/node_modules/
+web/dist/
+.run/
+*.tsbuildinfo

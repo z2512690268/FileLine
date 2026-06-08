@@ -1,0 +1,34 @@
+name: versioned_line_demo
+description: Version browser demo for generated trend figures.
+initial_load:
+  include:
+    - path: FileLine-Pipelines/test/versioned/trend_v3.csv
+      source: initial
+      tags:
+        - version_demo
+        - line_demo
+  type: raw
+  global_tags:
+    - version_demo
+steps:
+  - processor: plot_line
+    inputs: initial
+    output: line_demo
+    params:
+      time_col: epoch
+      value_col: loss
+      tag_col: run
+      title: Versioned Line Demo - v5
+      xlabel: Epoch
+      ylabel: Loss
+      tag_colors:
+        A: '#dc2626'
+        B: '#7c3aed'
+      ylim:
+        - 0
+        - 1
+    cache: false
+    force_rerun: true
+final_output:
+  - name: line_demo
+    export: versioned_line_demo.pdf

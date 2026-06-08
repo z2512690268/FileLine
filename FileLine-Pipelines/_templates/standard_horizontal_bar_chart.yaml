@@ -1,0 +1,30 @@
+name: Standard horizontal bar ranking
+description: Rank categories by a numeric value using horizontal bars.
+initial_load:
+  include:
+  - path: '*'
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - studio
+  - standard_template
+steps:
+- processor: plot_horizontal_bar
+  inputs: initial
+  output: horizontal_bar_figure
+  params:
+    y_col: category
+    value_col: value
+    title: Horizontal Bar Ranking
+    xlabel: Value
+    ylabel: Category
+    figsize:
+    - 7
+    - 4
+    grid: true
+    dpi: 300
+final_output:
+- name: horizontal_bar_figure
+  export: horizontal_bar_figure.pdf

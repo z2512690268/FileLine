@@ -1,0 +1,31 @@
+name: studio_20260607
+description: Auto-generated from utilization.csv
+initial_load:
+  include:
+  - path: /home/keyao/cloudcli/FileLine/experiments/fmrl/raw/15.csv
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - studio
+  - auto_chart
+steps:
+- processor: plot_grouped_bar
+  inputs: initial
+  output: studio_20260607
+  params:
+    main_group_col: entity
+    sub_group_col: phase
+    value_col: pct
+    title: Utilization
+    xlabel: Entity
+    ylabel: Pct
+    figsize:
+    - 6
+    - 4
+    grid: true
+    dpi: 300
+final_output:
+- name: studio_20260607
+  export: studio_20260607.pdf

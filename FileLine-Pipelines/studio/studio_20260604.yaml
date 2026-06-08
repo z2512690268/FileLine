@@ -1,0 +1,99 @@
+initial_load:
+  include:
+  - path: /home/keyao/cloudcli/FMRL/logs/e1_throughput/e1_cfg_s_fmrl_r1.log
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - DAG_COMPLEX
+  - studio
+steps:
+- processor: csv_multiplier
+  inputs: initial
+  output: branch_a
+  params:
+    multiplier: 2
+- processor: test_named_split
+  inputs: initial
+  outputs:
+    A: path_a
+    B: path_b
+    C: path_c
+    D: path_d
+- processor: csv_multiplier
+  inputs: path_a
+  output: result_a
+  params:
+    multiplier: 10
+- processor: csv_multiplier
+  inputs: path_b
+  output: result_b
+  params:
+    multiplier: 100
+- processor: csv_multiplier
+  inputs: path_c
+  output: result_c
+  params:
+    multiplier: 1
+- processor: csv_multiplier
+  inputs: path_d
+  output: result_d
+  params:
+    multiplier: 50
+- processor: csv_concat
+  inputs:
+  - branch_a
+  - result_a
+  - result_b
+  - result_c
+  - result_d
+  output: merged
+- processor: test_named_split
+  inputs: merged
+  outputs:
+    X: group_x
+    Y: group_y
+  params:
+    split_col: group
+- processor: csv_multiplier
+  inputs: group_x
+  output: result_x
+  params:
+    multiplier: 5
+- processor: csv_multiplier
+  inputs: group_y
+  output: result_y
+  params:
+    multiplier: 20
+- processor: csv_concat
+  inputs:
+  - result_x
+  - result_y
+  output: grouped_merge
+- processor: plot_grouped_bar
+  inputs: merged
+  output: chart_total
+  params:
+    main_group_col: cat
+    sub_group_col: group
+    value_col: value
+    title: Total Merge
+  export: total_chart.pdf
+- processor: plot_grouped_bar
+  inputs: grouped_merge
+  output: chart_grouped
+  params:
+    main_group_col: cat
+    sub_group_col: group
+    value_col: value
+    title: Grouped Merge
+  export: grouped_chart.pdf
+final_output:
+- name: merged
+  export: final_merged.csv
+- name: grouped_merge
+  export: final_grouped.csv
+- name: chart_total
+- name: chart_grouped
+name: studio_20260604
+description: Created from FileLine Studio

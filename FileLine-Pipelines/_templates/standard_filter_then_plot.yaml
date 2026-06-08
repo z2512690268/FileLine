@@ -1,0 +1,39 @@
+name: Standard filter then plot
+description: Filter rows first, then plot a clean metric curve.
+initial_load:
+  include:
+  - path: '*'
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - studio
+  - standard_template
+steps:
+- processor: filter_table
+  inputs: initial
+  output: filtered_table
+  params:
+    conditions:
+      status: ok
+    operator: and
+    keep_missing: true
+- processor: plot_line
+  inputs: filtered_table
+  output: filtered_line_figure
+  params:
+    time_col: x
+    value_col: value
+    tag_col: series
+    title: Filtered Metric
+    xlabel: X
+    ylabel: Value
+    figsize:
+    - 6
+    - 4
+    grid: true
+    dpi: 300
+final_output:
+- name: filtered_line_figure
+  export: filtered_line_figure.pdf

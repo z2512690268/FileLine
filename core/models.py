@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table, Float
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table, Float, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .base import Base
@@ -66,4 +66,38 @@ class StepCache(Base):
     input_hash = Column(String(64), unique=False, index=True)
     output_id = Column(Integer, ForeignKey('data_entries.id'))
     group_name = Column(String(64), nullable=True)  # 命名多输出的组名
+    cache_scope = Column(String(64), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.now)
+
+
+class PipelineVersion(Base):
+    """管道运行版本记录"""
+    __tablename__ = 'pipeline_versions'
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.now)
+    config_file = Column(String(256))
+    entry_ids = Column(String(2048))  # JSON array of entry IDs
+    export_id = Column(Integer, ForeignKey('data_entries.id'), nullable=True)
+    export_name = Column(String(256))
+    cache_scope = Column(String(64), nullable=True)
+    config_snapshot = Column(Text, nullable=True)
+    processor_snapshot = Column(Text, nullable=True)
+    result_hash = Column(String(64), nullable=True)
+    status = Column(String(16), default="active")  # active / superseded
+
+
+class ExportMeta(Base):
+    """导出文件元数据"""
+    __tablename__ = 'export_meta'
+    name = Column(String(256), primary_key=True)   # 导出文件名, e.g. "fmrl_timeline.pdf"
+    data_entry_id = Column(Integer, ForeignKey('data_entries.id'))
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class UndoRecord(Base):
+    """撤销操作记录"""
+    __tablename__ = 'undo_record'
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.now)
+    entry_ids = Column(String(2048))  # JSON array of entry IDs
+    description = Column(String(512))

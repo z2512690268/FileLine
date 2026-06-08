@@ -1,0 +1,31 @@
+name: versioned_bar_demo
+description: Version browser demo for generated bar figures.
+initial_load:
+  include:
+  - path: FileLine-Pipelines/test/versioned/bar_v2.csv
+    source: initial
+    tags:
+    - version_demo
+    - bar_demo
+  type: raw
+  global_tags:
+  - version_demo
+steps:
+- processor: plot_bar
+  inputs: initial
+  output: bar_demo
+  params:
+    x_col: method
+    value_col: value
+    title: Versioned Bar Demo - v2
+    xlabel: Method
+    ylabel: Score
+    color: '#2563eb'
+    ylim:
+    - 0
+    - 100
+  cache: false
+  force_rerun: true
+final_output:
+- name: bar_demo
+  export: versioned_bar_demo.pdf

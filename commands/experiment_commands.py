@@ -289,6 +289,37 @@ def import_cmd(package, name, pipelines_dir):
                 conn.commit()
             except Exception:
                 pass
+            try:
+                conn.execute("ALTER TABLE step_cache ADD COLUMN cache_scope VARCHAR(64)")
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE pipeline_versions ADD COLUMN cache_scope VARCHAR(64)")
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE pipeline_versions ADD COLUMN config_snapshot TEXT")
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE pipeline_versions ADD COLUMN processor_snapshot TEXT")
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE pipeline_versions ADD COLUMN result_hash VARCHAR(64)")
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                conn.execute("UPDATE step_cache SET cache_scope = 'legacy' WHERE cache_scope IS NULL OR cache_scope = ''")
+                conn.execute("UPDATE pipeline_versions SET cache_scope = 'legacy' WHERE cache_scope IS NULL OR cache_scope = ''")
+                conn.commit()
+            except Exception:
+                pass
             conn.close()
 
         # 解压 pipeline 文件 (到实验目录内, 自包含)
@@ -315,5 +346,5 @@ def import_cmd(package, name, pipelines_dir):
 
         click.secho(f"导入成功: {exp_name}", fg="green")
         click.secho(f"  python main.py experiment use {exp_name}", fg="cyan")
-        if pipelines_target.exists():
-            click.secho(f"  pipeline: {pipelines_target}/", fg="cyan")
+        if pip_exp_target.exists():
+            click.secho(f"  pipeline: {pip_exp_target}/", fg="cyan")

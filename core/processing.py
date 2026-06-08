@@ -16,6 +16,7 @@ class ProcessorRegistry:
     """处理函数注册中心（支持任意文件类型）"""
     _processors: Dict[str, Dict] = {}
     _overwrite_mode: bool = False  # True=允许实验版本覆盖全局
+    SAME_OUTPUT_EXT = "__same__"
 
     @classmethod
     def dependencies(cls, deps):
@@ -44,14 +45,13 @@ class ProcessorRegistry:
             raise ValueError(f"无效的input_type：{input_type}")
         if output_type not in {"single", "multi"}:
             raise ValueError(f"无效的output_type：{output_type}")
-        if not output_ext.startswith("."):
+        if output_ext != cls.SAME_OUTPUT_EXT and not output_ext.startswith("."):
             output_ext = f".{output_ext}"
         def decorator(func: Callable):
             _name = name or func.__name__
             if _name in cls._processors:
                 if not cls._overwrite_mode:
-                    # 已注册不覆盖 (实验版本优先, 全局版本静默跳过)
-                    return func
+                    raise ValueError(f"处理器 {_name} 已注册")
             sig = inspect.signature(func)
             func_hash = cls._calculate_hash(func)
 
@@ -158,16 +158,21 @@ class DataProcessor:
 
     def _run_single(self, processor, processor_name, params, proc_input, parent_entries) -> DataEntry:
         """单输出执行"""
+        output_ext = processor["output_ext"]
+        if output_ext == ProcessorRegistry.SAME_OUTPUT_EXT:
+            output_ext = Path(proc_input.path).suffix if proc_input is not None else ".dat"
+            if not output_ext:
+                output_ext = ".dat"
         if proc_input is not None:
             # input_type = single / multi
             output_path, entry = self.storage.create_processed_file(
-                ext=processor["output_ext"], session=self.session
+                ext=output_ext, session=self.session
             )
             result_tags = processor["func"](proc_input, output_path=output_path, **params)
         else:
             # input_type = none
             output_path, entry = self.storage.create_processed_file(
-                ext=processor["output_ext"], session=self.session
+                ext=output_ext, session=self.session
             )
             result_tags = processor["func"](output_path=output_path, **params)
             entry.parents = []
@@ -306,20 +311,29 @@ def load_processors_from_dir(directory: Path):
     if not directory.is_dir():
         return
     ProcessorRegistry._overwrite_mode = True
+    directory = directory.resolve()
+    inserted_path = False
     try:
+        if str(directory) not in sys.path:
+            sys.path.insert(0, str(directory))
+            inserted_path = True
         for py_file in sorted(directory.glob("*.py")):
             if py_file.stem.startswith("_"):
                 continue
-            module_name = f"_exp_processor_{py_file.stem}"
+            module_hash = hashlib.sha256(str(py_file.resolve()).encode("utf-8")).hexdigest()[:8]
+            module_name = f"_exp_processor_{py_file.stem}_{module_hash}"
             try:
                 spec = importlib.util.spec_from_file_location(module_name, py_file)
                 if spec and spec.loader:
                     mod = importlib.util.module_from_spec(spec)
-                    if module_name in sys.modules:
-                        continue
                     sys.modules[module_name] = mod
                     spec.loader.exec_module(mod)
             except Exception:
                 pass
     finally:
+        if inserted_path:
+            try:
+                sys.path.remove(str(directory))
+            except ValueError:
+                pass
         ProcessorRegistry._overwrite_mode = False

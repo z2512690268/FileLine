@@ -2,6 +2,7 @@
 import pandas as pd
 from pathlib import Path
 from core.processing import ProcessorRegistry, DataProcessor
+import processes  # noqa: F401 - load built-in processors
 
 
 class TestRegistry:
@@ -47,6 +48,15 @@ class TestRegistry:
         def d(inp, output_path, **kw): pass
 
         assert ProcessorRegistry.get_processor(name)["output_ext"] == ".pdf"
+        ProcessorRegistry._processors.pop(name, None)
+
+    def test_same_output_ext_sentinel(self):
+        name = "_test_same_ext"
+
+        @ProcessorRegistry.register(name, output_ext=ProcessorRegistry.SAME_OUTPUT_EXT)
+        def d(inp, output_path, **kw): pass
+
+        assert ProcessorRegistry.get_processor(name)["output_ext"] == ProcessorRegistry.SAME_OUTPUT_EXT
         ProcessorRegistry._processors.pop(name, None)
 
 
@@ -130,6 +140,20 @@ class TestSingleOutput:
             assert sorted([t.name for t in result.tags]) == sorted(expected), f"mode={mode}"
 
         ProcessorRegistry._processors.pop("_test_tag_ret", None)
+
+    def test_file_identity_preserves_extension_and_content(self, storage, db_session, tmp_path):
+        source = tmp_path / "raw_data.log"
+        source.write_text("line one\nline two\n")
+        entry = storage.store_raw_data(str(source), db_session)
+        db_session.commit()
+
+        dp = DataProcessor(storage, db_session)
+        result = dp.run("file_identity", entry.id)
+
+        assert Path(result.path).suffix == ".log"
+        assert Path(result.path).read_text() == source.read_text()
+        assert "identity" in [t.name for t in result.tags]
+        assert result.parents[0].id == entry.id
 
 
 class TestMultiOutput:

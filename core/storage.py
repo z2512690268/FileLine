@@ -1,9 +1,11 @@
 # core/storage.py
+import logging
 import shutil
 from pathlib import Path
-import json
 from datetime import datetime
-from .base import experiment_manager
+from .base import experiment_manager, get_session
+
+logger = logging.getLogger(__name__)
 
 
 class FileStorage:
@@ -14,7 +16,7 @@ class FileStorage:
 
     def __init__(self):
         self._setup_directories()
-        self._load_exports_meta()
+        self._meta_cache = self._load_meta()
 
     def _setup_directories(self):
         self.base_path.mkdir(exist_ok=True)
@@ -22,20 +24,50 @@ class FileStorage:
         (self.base_path/"processed").mkdir(exist_ok=True)
         (self.base_path/"exports").mkdir(exist_ok=True)
 
-    def _load_exports_meta(self):
-        """加载元信息文件到内存"""
-        meta_path = self.base_path/"exports"/"exports.meta"
+    def _load_meta(self) -> dict:
+        """从 DB 加载导出元数据到内存缓存"""
+        from .models import ExportMeta
+        cache = {}
         try:
-            with meta_path.open("r", encoding="utf-8") as f:
-                self._meta_cache = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            self._meta_cache = {}
+            with get_session() as session:
+                rows = session.query(ExportMeta).all()
+                for r in rows:
+                    cache[r.name] = {
+                        "id": r.data_entry_id,
+                        "created_at": r.created_at.isoformat() if r.created_at else "",
+                    }
+        except Exception:
+            logger.exception("FileStorage._load_meta failed")
+        return cache
 
-    def _save_exports_meta(self):
-        """将内存中的元信息写入文件"""
-        meta_path = self.base_path/"exports"/"exports.meta"
-        with meta_path.open("w", encoding="utf-8") as f:
-            json.dump(self._meta_cache, f, indent=2, ensure_ascii=False)
+    def _save_meta(self, name: str, file_id: int, session=None):
+        """保存单条导出元数据到 DB + 缓存"""
+        from .models import ExportMeta
+        self._meta_cache[name] = {
+            "id": file_id,
+            "created_at": datetime.now().isoformat(),
+        }
+        own_session = session is None
+        try:
+            s = session or get_session()
+            try:
+                existing = s.query(ExportMeta).get(name)
+                if existing:
+                    existing.data_entry_id = file_id
+                    existing.created_at = datetime.now()
+                else:
+                    s.add(ExportMeta(
+                        name=name,
+                        data_entry_id=file_id,
+                        created_at=datetime.now(),
+                    ))
+                if own_session:
+                    s.commit()
+            finally:
+                if own_session:
+                    s.close()
+        except Exception:
+            logger.exception("FileStorage._save_meta failed")
 
     def store_raw_data(self, file_path, session):
         """存储原始数据，先创建条目获取 ID，以 {id}{ext} 命名"""
@@ -62,25 +94,34 @@ class FileStorage:
         target_path = self.base_path / "processed" / f"{entry.id}{ext}"
         entry.path = str(target_path)
         return target_path, entry
-    
-    def create_export_file(self, name: str, file_id: int) -> Path:
-        """创建导出文件并更新元信息
-        Args:
-            name:    导出文件名（可包含子目录，如 "reports/sales.csv"）
-            file_id: 必须提供的文件标识符
-        Returns:
-            导出文件的完整路径
-        """
-        # 构建目标路径并确保目录存在
-        target_path = self.base_path/"exports"/name
+
+    def create_export_file(self, name: str, file_id: int, session=None) -> Path:
+        """创建导出文件并更新元信息"""
+        target_path = self.base_path / "exports" / name
         target_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # 更新内存中的元信息
-        self._meta_cache[name] = {
-            "id": file_id,
-            "created_at": datetime.now().isoformat()
-        }
-
-        # 写入磁盘
-        self._save_exports_meta()
+        self._save_meta(name, file_id, session)
         return target_path
+
+    def remove_export_meta(self, entry_id: int, session=None):
+        """删除指定 entry_id 的导出元数据"""
+        from .models import ExportMeta
+        for name, meta in list(self._meta_cache.items()):
+            if meta.get("id") == entry_id:
+                del self._meta_cache[name]
+                export_file = self.base_path / "exports" / name
+                if export_file.exists():
+                    export_file.unlink()
+        own_session = session is None
+        try:
+            s = session or get_session()
+            try:
+                s.query(ExportMeta).filter(
+                    ExportMeta.data_entry_id == entry_id
+                ).delete()
+                if own_session:
+                    s.commit()
+            finally:
+                if own_session:
+                    s.close()
+        except Exception:
+            logger.exception("FileStorage.remove_export_meta failed")

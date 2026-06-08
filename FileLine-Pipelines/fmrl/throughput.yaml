@@ -22,9 +22,10 @@ steps:
         Blocking: "#90A4AE"
         AIDE-RL: "#1565C0"
       sub_group_order: ["Sequential", "Blocking", "AIDE-RL"]
+      main_group_order: ["Small", "Large"]
       main_group_labels:
-        Small: "Small (2 GPU)"
-        Large: "Large (4 GPU)"
+        Small: "Small"
+        Large: "Large"
       legend_loc: "upper left"
       ylim: [0, 2.8]
       show_bar_values: true

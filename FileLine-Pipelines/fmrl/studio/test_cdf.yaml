@@ -1,0 +1,33 @@
+name: test_cdf
+description: Auto-generated from cdf_n_tokens_m1_7b_8k.csv
+initial_load:
+  include:
+    - path: /home/keyao/cloudcli/FileLine/experiments/fmrl/raw/19.csv
+      source: initial
+      tags:
+        - studio_input
+  type: raw
+  global_tags:
+    - studio
+    - auto_chart
+steps:
+  - processor: plot_line
+    inputs: initial
+    output: test_cdf
+    params:
+      time_col: n_tokens
+      value_col: cdf_pct
+      title: Cdf N Tokens M1 7B 8K
+      xlabel: N Tokens
+      ylabel: Cdf Pct
+      figsize:
+        - 6
+        - 4
+      grid: true
+      dpi: 300
+      ylim:
+        - 0
+        - 100
+final_output:
+  - name: test_cdf
+    export: test_cdf.pdf

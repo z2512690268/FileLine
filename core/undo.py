@@ -1,55 +1,86 @@
-"""撤销日志：记录每批操作的 entry_id，支持撤回"""
+"""撤销日志：通过 SQLite DB 记录每批操作, 支持撤回"""
 import json
-from pathlib import Path
+import logging
 from datetime import datetime
-from .base import experiment_manager
+from .base import get_session
+
+logger = logging.getLogger(__name__)
 
 
 class UndoLog:
     def __init__(self):
-        base = experiment_manager.base_path
-        self._path = base / ".undo_log"
-        self._entries = self._load()
-
-    def _load(self):
-        if self._path.exists():
-            return json.loads(self._path.read_text(encoding="utf-8"))
-        return []
-
-    def _save(self):
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps(self._entries, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        pass
 
     def record(self, entry_ids, description=""):
         """记录一批 entry_id"""
         if isinstance(entry_ids, int):
             entry_ids = [entry_ids]
-        self._entries.append({
-            "timestamp": datetime.now().isoformat(),
-            "entry_ids": entry_ids,
-            "description": description,
-        })
-        self._save()
+        from .models import UndoRecord
+        try:
+            with get_session() as session:
+                session.add(UndoRecord(
+                    timestamp=datetime.now(),
+                    entry_ids=json.dumps(entry_ids),
+                    description=description,
+                ))
+                session.commit()
+        except Exception:
+            logger.exception("UndoLog.record failed")
 
     def peek(self, n=1):
         """查看最近 n 批，不删除"""
-        return list(reversed(self._entries[-n:])) if self._entries else []
+        from .models import UndoRecord
+        try:
+            with get_session() as session:
+                rows = session.query(UndoRecord).order_by(
+                    UndoRecord.id.desc()
+                ).limit(n).all()
+            result = []
+            for r in reversed(rows):
+                result.append({
+                    "timestamp": r.timestamp.isoformat() if r.timestamp else "",
+                    "entry_ids": json.loads(r.entry_ids) if r.entry_ids else [],
+                    "description": r.description or "",
+                })
+            return result
+        except Exception:
+            return []
 
     def pop(self, n=1):
         """弹出最近 n 批并持久化"""
+        from .models import UndoRecord
         removed = []
-        for _ in range(min(n, len(self._entries))):
-            removed.append(self._entries.pop())
-        self._save()
+        try:
+            with get_session() as session:
+                rows = session.query(UndoRecord).order_by(
+                    UndoRecord.id.desc()
+                ).limit(n).all()
+                for r in rows:
+                    removed.append({
+                        "timestamp": r.timestamp.isoformat() if r.timestamp else "",
+                        "entry_ids": json.loads(r.entry_ids) if r.entry_ids else [],
+                        "description": r.description or "",
+                    })
+                    session.delete(r)
+                session.commit()
+        except Exception:
+            logger.exception("UndoLog.pop failed")
         return list(reversed(removed))
 
     def clear(self):
-        self._entries = []
-        self._save()
+        from .models import UndoRecord
+        try:
+            with get_session() as session:
+                session.query(UndoRecord).delete()
+                session.commit()
+        except Exception:
+            logger.exception("UndoLog.clear failed")
 
     @property
     def count(self):
-        return len(self._entries)
+        from .models import UndoRecord
+        try:
+            with get_session() as session:
+                return session.query(UndoRecord).count()
+        except Exception:
+            return 0

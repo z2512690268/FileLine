@@ -1,0 +1,31 @@
+name: Standard grouped bar chart
+description: Compare values across a main group and sub-group.
+initial_load:
+  include:
+  - path: '*'
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - studio
+  - standard_template
+steps:
+- processor: plot_grouped_bar
+  inputs: initial
+  output: grouped_bar_figure
+  params:
+    main_group_col: category
+    sub_group_col: series
+    value_col: value
+    title: Grouped Bar Chart
+    xlabel: Category
+    ylabel: Value
+    figsize:
+    - 7
+    - 4
+    grid: true
+    dpi: 300
+final_output:
+- name: grouped_bar_figure
+  export: grouped_bar_figure.pdf

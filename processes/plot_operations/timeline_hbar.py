@@ -35,6 +35,10 @@ def plot_timeline_hbar(
     # Y轴配置
     category_order: Optional[List[str]] = None,
     category_labels: Optional[Dict[str, str]] = None,
+    reverse_order: bool = False,  # True=顶部第一个类别
+    preserve_csv_order: bool = False,  # True=按 CSV 行顺序排列类别
+    intra_group_gap: float = 1.0,   # 组内间距 (同 GPU)
+    inter_group_gap: float = 2.5,   # 组间间距 (不同 GPU), 包含 intra 部分
     # 标签与格式
     min_label_duration_ratio: float = 0.01,
     max_label_length: int = 15,
@@ -103,17 +107,31 @@ def plot_timeline_hbar(
     
     # 处理类别顺序和标签
     if category_order is None:
-        # 根据数据频率排序
-        category_counts = df[category_col].value_counts()
-        category_order = category_counts.index.tolist()
+        if preserve_csv_order:
+            category_order = df[category_col].drop_duplicates().tolist()
+        else:
+            category_counts = df[category_col].value_counts()
+            category_order = category_counts.index.tolist()
     else:
         # 确保所有类别都在排序中
         unique_categories = set(df[category_col].unique())
         category_order = [c for c in category_order if c in unique_categories]
         category_order.extend(sorted(unique_categories - set(category_order)))
     
-    # 创建Y轴位置映射
-    category_positions = {cat: idx for idx, cat in enumerate(category_order)}
+    # 创建Y轴位置映射 (支持可变组间距)
+    import re as _re
+    def _gpu_key(cat):
+        m = _re.match(r'(GPU \d+)', cat)
+        return m.group(1) if m else cat
+    category_positions = {}
+    _pos = 0.0
+    _prev_gpu = None
+    for i, cat in enumerate(category_order):
+        gpu = _gpu_key(cat)
+        if i > 0:
+            _pos += inter_group_gap if gpu != _prev_gpu else intra_group_gap
+        category_positions[cat] = _pos
+        _prev_gpu = gpu
     
     # 处理类别标签
     if category_labels is None:
@@ -155,7 +173,9 @@ def plot_timeline_hbar(
     if ylim is not None:
         ax.set_ylim(ylim)
     else:
-        ax.set_ylim(-1, len(category_order) - 1)
+        ax.set_ylim(-1, max(category_positions.values()) + 1)
+    if reverse_order:
+        ax.invert_yaxis()
     # 获取全局时间范围
     min_time = df[start_col].min()
     max_time = df[end_col].max()

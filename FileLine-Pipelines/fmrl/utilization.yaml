@@ -20,6 +20,16 @@ steps:
       ylim: [0, 100]
       legend_loc: "upper right"
       show_bar_values: false
+      main_group_order: ["Sequential", "AIDE-RL"]
+      main_group_labels:
+        Sequential: "Sequential"
+        AIDE-RL: "AIDE-RL"
+      sub_group_order: ["Rollout", "Reward", "Train", "Idle"]
+      colors:
+        Rollout: "#42A5F5"
+        Reward: "#66BB6A"
+        Train: "#FFA726"
+        Idle: "#EF5350"
 
 final_output:
   - name: utilization

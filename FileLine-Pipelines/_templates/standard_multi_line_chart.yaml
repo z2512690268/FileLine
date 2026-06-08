@@ -1,0 +1,32 @@
+name: Standard multi-series line chart
+description: Plot one metric across multiple methods, runs, or groups.
+initial_load:
+  include:
+  - path: '*'
+    source: initial
+    tags:
+    - studio_input
+  type: raw
+  global_tags:
+  - studio
+  - standard_template
+steps:
+- processor: plot_line
+  inputs: initial
+  output: multi_line_figure
+  params:
+    time_col: x
+    value_col: value
+    tag_col: series
+    title: Multi-Series Line Chart
+    xlabel: X
+    ylabel: Value
+    legend_title: Series
+    figsize:
+    - 6
+    - 4
+    grid: true
+    dpi: 300
+final_output:
+- name: multi_line_figure
+  export: multi_line_figure.pdf

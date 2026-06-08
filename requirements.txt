@@ -6,3 +6,5 @@ tabulate
 pyyaml
 sqlalchemy
 streamlit
+fastapi
+uvicorn
